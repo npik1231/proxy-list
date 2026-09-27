@@ -22,9 +22,6 @@ I am aware that link click counts, ratings, and other things dependent on Fireba
 ### Develop For Proxies With Ease
 Try out my newest project, the [Proxy Development Toolkit](https://github.com/yourworstnightmare1/proxy-development-toolkit)! Easily design and test your websites around proxy functionality, with support for Scramjet and Ultraviolet, modern transports (epoxy-tls, wisp-js, and libcurl-transport), and more, supercharged with MCP support for your favorite AI coding agents such as Cursor, Claude, Codex, and more.
 
-### Google Forms Deprecated
-Google Forms is now deprecated and can no longer be used to submit links or report bugs in favor of our multi-use, more refined, and easier to use on-site submission form framework. [Contribute to the list here](./contribute/)
-
 ## Update Notice
 
 ### Fixed

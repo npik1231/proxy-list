@@ -13460,7 +13460,6 @@
 
     function importantNoticeAlertClass(title) {
       const t = String(title || "").trim();
-      if (/google forms deprecated/i.test(t)) return "notice-alert-warning";
       if (/proxy connections fully operational/i.test(t)) return "notice-alert-success";
       if (/canary branch coming soon/i.test(t)) return "notice-alert-info";
       if (/link ratings back up/i.test(t)) return "notice-alert-info";
