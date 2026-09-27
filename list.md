@@ -1,7 +1,7 @@
 # Proxy List
 > [!NOTE]
 > v7.3.5 | Released: September 25, 2026
-> r295 | Last Updated: September 27, 2026
+> r296 | Last Updated: September 27, 2026
 > Total onsite links: 51518 (51175 sorted + 343 unsorted)\
 > https://yourworstnightmare1.github.io/proxy-list/
 <br>
@@ -2612,7 +2612,7 @@ Try out my newest project, the [Proxy Development Toolkit](https://github.com/yo
 > [!NOTE]
 > | Category | Capabilities | Protocol(s) | Links |
 > | - | - | - | - |
-> | Proxy/Games | GDB:utopia | Ultraviolet | 33 |
+> | Proxy/Games | GDB:utopia | Ultraviolet | 32 |
 > [!IMPORTANT]
 > this site uses highly detectable domains, very likely all of these are blocked for you
 
@@ -2636,7 +2636,6 @@ Try out my newest project, the [Proxy Development Toolkit](https://github.com/yo
 | | https://tatata12345678910e2.chickenkiller.com | 5/9/2026 | N/A | N/A | [1NobleCyber](https://github.com/1NobleCyber)
 | | https://qowerschool.com/ | N/A | N/A | N/A | [Vexo Sirramenboi](https://github.com/Vexo-Sirramenboi)
 | | https://4l3x19the562oh.twilightparadox.com | N/A | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
-| | https://mhi.imaginelearningmath.com | N/A | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
 | | https://mhi.banglam.com | N/A | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
 | | https://hcpss.org.bitds.eu | N/A | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
 | | https://paperelathailandhappiness.chickenkiller.com | N/A | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)

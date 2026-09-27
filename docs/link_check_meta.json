@@ -1,8 +1,10 @@
 {
-  "checked_at": "2026-09-27T04:52:06Z",
-  "checked_at_display": "2026-09-27 04:52 UTC",
+  "checked_at": "2026-09-27T08:07:06Z",
+  "checked_at_display": "2026-09-27 08:07 UTC",
   "added_count": 0,
-  "removed_count": 0,
+  "removed_count": 1,
   "added_links": [],
-  "removed_links": []
+  "removed_links": [
+    "https://mhi.imaginelearningmath.com"
+  ]
 }
