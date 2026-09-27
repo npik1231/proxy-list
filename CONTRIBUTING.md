@@ -1,7 +1,11 @@
 # Contribute to the List
 Thanks for wanting to build our list and help the community! Here's how to request your link to the list:
 
-# 1. Contribution through GitHub
+# 1. Contribute through the Proxy List
+You can contribute through the Proxy List site by clicking the "Contribute" button in the sidebar and filling out the form labeled "Submit links for review". You must have an account on the list in order to do this.
+You can also [click here](https://yourworstnightmare1.github.io/proxy-list/contribute/) and you will be taken to the form.
+
+# 2. Contribution through GitHub
 ## Requesting Links
 1. [Fork this repository](https://github.com/yourworstnightmare1/proxy-list/fork)
 2. Open the `list.md` file.
@@ -89,27 +93,8 @@ Thanks for wanting to build our list and help the community! Here's how to reque
 4. Commit your changes to `main` branch.
 5. Open a pull request.
 
-# 2. Contribute through Google Forms
-> [!WARNING]
-> Google Forms is being deprecated and removed on August 31, 2026 in favor of our on-site form submission system, which is faster and allows for better moderation of requests.
-
-[Go to the form here and fill out the info](https://forms.gle/SMx9EUkBeiFuLwBa8), then submit. Your Google email and real name are not shared with us. Please make sure to give a name/alias so we can give you credit for your contribution, else I will just fill it in with "Anonymous Contributor".
-
-# Rules
-1. Do not give links that are already on the list. It will be denied.
-2. Link must be working and active.
-3. Keep formatting consistent, do not change the formatting other than what is listed in the formatting guide above. This is to avoid problems and breaking the markdown or site.
-4. Do not submit links that are in blocked domains:
-
-## Blocked Domains
-The following domains are not allowed to be submitted:
-- `b-cdn.net`
-
 ## Pull Request Edits
 I may edit the pull request if there is a mistake or small error, then push those edits to main. You will still be fully credited for contributing to the list.
-
-# 3. Submit through the Proxy List (recommended)
-[You can submit through the Proxy List and view rules here](https://yourworstnightmare1.github.io/proxy-list/contribute). You must have a Proxy List account in order to submit requests.
 
 # Common Questions
 ### Will these links show on both `list.md` and the website?
@@ -120,7 +105,4 @@ After three consecutive failed HTTP checks (runs every six hours), a link is eli
 
 ### When do users see update banners?
 Link checks and filter metadata run every six hours **silently** (no revision bump). Users only get the refresh banner when **revision** and **Last Updated** change — on **Sundays** when the bot removes or adds links, or when a maintainer bumps **version** and `## Update Notice` for a weekly release.
-
-### What if a link I submit is blocked?
-It will stay, it will just be likely unusable by users on that filter.
 
