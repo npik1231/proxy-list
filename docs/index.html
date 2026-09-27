@@ -7740,6 +7740,25 @@
       }
     }
 
+    /**
+     * Hashes whose linkRatings doc was actually read (Firestore or Worker batch OK) → ms timestamp.
+     * Unrated links are ~all rows; without this every chunk / scroll window / reload re-read them.
+     */
+    const linkRatingConfirmedAt = new Map();
+    /** Re-read a confirmed rating (incl. "no doc") at most this often per browser. */
+    const LINK_RATING_REVALIDATE_MS = 30 * 60 * 1000;
+    /** Confirmed-empty ratings persist on disk this long (keyed by 16-char hash prefix). */
+    const LINK_RATING_ZERO_DISK_MS = 12 * 60 * 60 * 1000;
+
+    function markLinkRatingConfirmed(hash, at) {
+      if (hash) linkRatingConfirmedAt.set(hash, Number.isFinite(at) ? at : Date.now());
+    }
+
+    function linkRatingRecentlyConfirmed(hash) {
+      const at = linkRatingConfirmedAt.get(hash);
+      return Number.isFinite(at) && Date.now() - at < LINK_RATING_REVALIDATE_MS;
+    }
+
     function hydrateLinkRatingAggFromDiskCache(stamp, hashes) {
       if (!stamp || !hashes || !hashes.length) return;
       const o = readJsonLocalDisk(LS_LINK_RATING_AGG_DISK);
@@ -7747,16 +7766,25 @@
       if (Date.now() - o.savedAt > LINK_AGG_DISK_CACHE_MAX_MS) return;
       const byHash = o.byHash;
       if (!byHash || typeof byHash !== "object") return;
+      const zeros = o.zeros && typeof o.zeros === "object" ? o.zeros : null;
+      const nowMin = Math.floor(Date.now() / 60000);
       for (const h of hashes) {
         if (linkRatingAggByHash.has(h)) continue;
         const row = byHash[h];
-        if (!row || typeof row !== "object") continue;
-        const up = Number(row.u);
-        const down = Number(row.d);
-        if (!Number.isFinite(up) || !Number.isFinite(down)) continue;
-        // Never hydrate pure 0/0 — Worker/failed fetches used to stamp zeros and block live reads.
-        if (up === 0 && down === 0) continue;
-        linkRatingAggByHash.set(h, { up, down });
+        if (row && typeof row === "object") {
+          const up = Number(row.u);
+          const down = Number(row.d);
+          if (Number.isFinite(up) && Number.isFinite(down) && (up > 0 || down > 0)) {
+            linkRatingAggByHash.set(h, { up, down });
+            continue;
+          }
+        }
+        // Only zeros confirmed by a live read are stored here (never Worker-failure fill-ins).
+        const zMin = zeros ? Number(zeros[h.slice(0, 16)]) : NaN;
+        if (Number.isFinite(zMin) && (nowMin - zMin) * 60000 < LINK_RATING_ZERO_DISK_MS) {
+          linkRatingAggByHash.set(h, { up: 0, down: 0 });
+          markLinkRatingConfirmed(h, zMin * 60000);
+        }
       }
     }
 
@@ -7777,6 +7805,16 @@
       }
     }
 
+    /** norm → ms of the last successful Worker count fetch (session + disk `t` map, minutes). */
+    const clickCountFetchedAt = new Map();
+    /** Open counts are cosmetic; re-ask the Worker for the same URL at most this often. */
+    const CLICK_COUNT_REVALIDATE_MS = 15 * 60 * 1000;
+
+    function clickCountRecentlyFetched(norm) {
+      const at = clickCountFetchedAt.get(norm);
+      return Number.isFinite(at) && Date.now() - at < CLICK_COUNT_REVALIDATE_MS;
+    }
+
     function hydrateClickCountDiskCache(stamp, norms) {
       if (!stamp || !norms || !norms.length) return;
       const o = readJsonLocalDisk(LS_CLICK_COUNT_DISK);
@@ -7784,11 +7822,14 @@
       if (Date.now() - o.savedAt > LINK_AGG_DISK_CACHE_MAX_MS) return;
       const byNorm = o.byNorm;
       if (!byNorm || typeof byNorm !== "object") return;
+      const fetchedMin = o.t && typeof o.t === "object" ? o.t : null;
       for (const n of norms) {
         const c = Number(byNorm[n]);
         if (!Number.isFinite(c) || c < 0) continue;
         const prev = clickCountCache.has(n) ? clickCountCache.get(n) : 0;
         clickCountCache.set(n, Math.max(Number(prev) || 0, c));
+        const m = fetchedMin ? Number(fetchedMin[n]) : NaN;
+        if (Number.isFinite(m) && !clickCountFetchedAt.has(n)) clickCountFetchedAt.set(n, m * 60000);
       }
     }
 
@@ -7809,17 +7850,21 @@
       if (!stamp || !norms || !norms.length) return;
       try {
         const prev = readJsonLocalDisk(LS_CLICK_COUNT_DISK);
+        const sameStamp = prev && prev.stamp === stamp;
         const byNorm =
-          prev && prev.stamp === stamp && prev.byNorm && typeof prev.byNorm === "object"
+          sameStamp && prev.byNorm && typeof prev.byNorm === "object"
             ? { ...prev.byNorm }
             : {};
+        const t = sameStamp && prev.t && typeof prev.t === "object" ? { ...prev.t } : {};
         for (const n of norms) {
           const c = clickCountCache.get(n);
           if (!Number.isFinite(c) || c < 0) continue;
           byNorm[n] = Math.max(Number(byNorm[n]) || 0, c);
+          const at = clickCountFetchedAt.get(n);
+          if (Number.isFinite(at)) t[n] = Math.floor(at / 60000);
         }
-        const payload = { stamp, savedAt: Date.now(), byNorm };
-        const s = JSON.stringify(payload);
+        let s = JSON.stringify({ stamp, savedAt: Date.now(), byNorm, t });
+        if (s.length > 4.5e6) s = JSON.stringify({ stamp, savedAt: Date.now(), byNorm });
         if (s.length > 4.5e6) return;
         localStorage.setItem(LS_CLICK_COUNT_DISK, s);
       } catch (_) {}
@@ -7844,15 +7889,26 @@
       if (!stamp || !hashes || !hashes.length) return;
       try {
         const prev = readJsonLocalDisk(LS_LINK_RATING_AGG_DISK);
+        const sameStamp = prev && prev.stamp === stamp;
         const byHash =
-          prev && prev.stamp === stamp && prev.byHash && typeof prev.byHash === "object" ? { ...prev.byHash } : {};
+          sameStamp && prev.byHash && typeof prev.byHash === "object" ? { ...prev.byHash } : {};
+        const zeros = sameStamp && prev.zeros && typeof prev.zeros === "object" ? { ...prev.zeros } : {};
         for (const h of hashes) {
           const ag = linkRatingAggByHash.get(h);
           if (!ag) continue;
-          byHash[h] = { u: Number(ag.up) || 0, d: Number(ag.down) || 0 };
+          const up = Number(ag.up) || 0;
+          const down = Number(ag.down) || 0;
+          if (up > 0 || down > 0) {
+            byHash[h] = { u: up, d: down };
+            delete zeros[h.slice(0, 16)];
+          } else {
+            delete byHash[h];
+            const at = linkRatingConfirmedAt.get(h);
+            if (Number.isFinite(at)) zeros[h.slice(0, 16)] = Math.floor(at / 60000);
+          }
         }
-        const payload = { stamp, savedAt: Date.now(), byHash };
-        const s = JSON.stringify(payload);
+        let s = JSON.stringify({ stamp, savedAt: Date.now(), byHash, zeros });
+        if (s.length > 4.5e6) s = JSON.stringify({ stamp, savedAt: Date.now(), byHash, zeros: {} });
         if (s.length > 4.5e6) return;
         localStorage.setItem(LS_LINK_RATING_AGG_DISK, s);
       } catch (_) {}
@@ -8107,6 +8163,14 @@
             if (!prev || best.up > prev.up || best.down > prev.down) {
               linkRatingAggByHash.set(primaryHash, best);
             }
+            // Worker batchGets every URL variant, so a returned key confirms all of them.
+            markLinkRatingConfirmed(primaryHash);
+            for (const v of urlKeyVariants(n)) {
+              const vh = normToHashCache.get(v);
+              if (!vh) continue;
+              markLinkRatingConfirmed(vh);
+              if (!linkRatingAggByHash.has(vh)) linkRatingAggByHash.set(vh, best);
+            }
           }
         } catch (_) {
           /* Worker ratings unavailable */
@@ -8156,13 +8220,22 @@
         hydrateLinkRatingAggFromDiskCacheRelaxed(hashes);
         if (!opts || !opts.skipLinkSaveCounts) hydrateLinkSaveCountFromDiskCache(stamp, hashes);
 
+        const hashNeedsFetch = (h) => {
+          if (linkRatingRecentlyConfirmed(h)) return false;
+          const ag = linkRatingAggByHash.get(h);
+          if (!ag) return true;
+          // Unconfirmed 0/0 may be a Worker-failure fill-in — revalidate those.
+          return (Number(ag.up) || 0) === 0 && (Number(ag.down) || 0) === 0;
+        };
+        const normsNeedingFetch = rawNorms.filter((n) => (normToHashList.get(n) || []).some(hashNeedsFetch));
+
         const needsWorkerFallback =
           !firebaseDb || isFirestoreReadCooled();
 
         // Client Firebase Auth is blocked on workers.dev (API key HTTP referrer),
         // so ratings must come from the Worker Admin proxy (or disk cache).
         if (needsWorkerFallback) {
-          await fetchLinkRatingsViaWorker(rawNorms, stamp);
+          if (normsNeedingFetch.length) await fetchLinkRatingsViaWorker(normsNeedingFetch, stamp);
           // Fill gaps so UI does not keep spinning; prefer disk/worker over inventing zeros early.
           hashes.forEach((h) => {
             if (!linkRatingAggByHash.has(h)) linkRatingAggByHash.set(h, { up: 0, down: 0 });
@@ -8170,14 +8243,17 @@
           return;
         }
 
+        // Prefer the Worker (its per-batch edge cache is shared by every visitor);
+        // only read docs directly for whatever it could not confirm.
+        if (normsNeedingFetch.length) {
+          try {
+            await fetchLinkRatingsViaWorker(normsNeedingFetch, stamp);
+          } catch (_) {}
+        }
+
         // Fetch ALL variant hashes (modern + legacy). Do not stamp modern misses as
         // 0/0 before legacy reads — ratings often live only on the legacy hash doc.
-        // Revalidate 0/0 entries too (disk/Worker may have poisoned them).
-        const toFetchAgg = hashes.filter((h) => {
-          const ag = linkRatingAggByHash.get(h);
-          if (!ag) return true;
-          return (Number(ag.up) || 0) === 0 && (Number(ag.down) || 0) === 0;
-        });
+        const toFetchAgg = hashes.filter(hashNeedsFetch);
         await parallelFirestoreDocGets("linkRatings", toFetchAgg, (h, snap) => {
           if (snap.exists) {
             const d = snap.data() || {};
@@ -8185,6 +8261,7 @@
           } else {
             linkRatingAggByHash.set(h, { up: 0, down: 0 });
           }
+          markLinkRatingConfirmed(h);
         });
 
         // Copy best aggregate onto the modern norm key when only a legacy doc exists.
@@ -8993,8 +9070,8 @@
       const norms = [...new Set(urls.map((u) => normalizeUrlKeyForClicks(u)).filter(Boolean))];
       const map = new Map();
       const stamp = (currentListVersionStamp || "").trim();
-      // Disk cache is optimistic only — always revalidate against the shared Worker
-      // when available so localhost / Pages don't stick on stale lower counts.
+      // Disk cache is optimistic; URLs not fetched within CLICK_COUNT_REVALIDATE_MS
+      // are revalidated against the shared Worker.
       hydrateClickCountDiskCache(stamp, norms);
       hydrateClickCountDiskCacheRelaxed(norms);
       const mergeClickCountCache = () => {
@@ -9016,10 +9093,10 @@
       const sharedApiAvailable =
         typeof window.ProxyListPresence !== "undefined" &&
         typeof window.ProxyListPresence.apiUrl === "function";
-      // When the shared API is available, refresh every requested URL (not only
-      // disk misses). Otherwise keep the old "uncached only" behavior for offline.
+      // When the shared API is available, refresh every URL not fetched recently
+      // (not only disk misses). Otherwise keep the "uncached only" behavior for offline.
       const toFetch = sharedApiAvailable
-        ? norms.slice()
+        ? norms.filter((n) => !clickCountRecentlyFetched(n))
         : norms.filter((n) => !clickCountCache.has(n));
       if (!toFetch.length) {
         if (onProgress) onProgress(norms.length, norms.length);
@@ -9098,6 +9175,7 @@
             }
             // Worker omits keys when Firestore is unavailable — keep disk/cache.
             if (!sawWorker) return;
+            clickCountFetchedAt.set(n, Date.now());
             const merged = Math.max(
               Number(clickCountCache.get(n)) || 0,
               Number(map.get(n)) || 0,
@@ -9159,8 +9237,22 @@
 
     const TOP_OPENS_DISPLAY = 10;
     const TOP_OPENS_FETCH_CAP = 80;
-    const TOP_OPENS_CACHE_MS = 10 * 60 * 1000;
-    let topOpenedDocsCache = { at: 0, docs: null };
+    const TOP_OPENS_CACHE_MS = 30 * 60 * 1000;
+    const LS_TOP_OPENS_DISK = "proxyList_topOpensDisk_v1";
+    let topOpenedDocsCache = (() => {
+      try {
+        const o = JSON.parse(localStorage.getItem(LS_TOP_OPENS_DISK) || "null");
+        if (o && typeof o.at === "number" && Array.isArray(o.docs) && o.docs.length) return o;
+      } catch (_) {}
+      return { at: 0, docs: null };
+    })();
+
+    function setTopOpenedDocsCache(docs) {
+      topOpenedDocsCache = { at: Date.now(), docs };
+      try {
+        localStorage.setItem(LS_TOP_OPENS_DISK, JSON.stringify(topOpenedDocsCache));
+      } catch (_) {}
+    }
     const MO_SORT_STORAGE_KEY = "proxyList_mostOpenedSort_v1";
     const MO_SORT_OPENS = "opens";
     const MO_SORT_FILTER = "filter";
@@ -9248,6 +9340,7 @@
         return topOpenedDocsCache.docs;
       }
       const cap = Math.max(1, Math.min(limit, 50));
+      let workerAnswered = false;
       try {
         const res = await fetch(
           typeof window.ProxyListPresence !== "undefined" && window.ProxyListPresence.apiUrl
@@ -9257,6 +9350,7 @@
         );
         if (res.ok) {
           const data = await res.json();
+          if (data && data.ok) workerAnswered = true;
           if (data && data.ok && Array.isArray(data.links) && data.links.length) {
             const docs = data.links
               .map((x) => ({
@@ -9266,19 +9360,21 @@
               .filter((x) => x.url && Number.isFinite(x.count) && x.count > 0)
               .slice(0, cap);
             if (docs.length) {
-              topOpenedDocsCache = { at: Date.now(), docs };
+              setTopOpenedDocsCache(docs);
               return docs;
             }
           }
         }
       } catch (_) {}
-      if (!firebaseDb || isFirestoreReadCooled()) return topOpenedDocsCache.docs || [];
+      // An empty Worker answer means its own Firestore read failed (usually quota) —
+      // a client-side 200-doc query would only burn the same quota again.
+      if (workerAnswered || !firebaseDb || isFirestoreReadCooled()) return topOpenedDocsCache.docs || [];
       try {
         // Fetch extra docs so legacy/modern hash pairs can be merged client-side.
         const snap = await firebaseDb
           .collection("link_clicks")
           .orderBy("count", "desc")
-          .limit(Math.min(200, Math.max(cap * 4, 80)))
+          .limit(Math.min(120, Math.max(cap * 2, 60)))
           .get();
         const docs = snap.docs.map((doc) => {
           const d = doc.data() || {};
@@ -9286,7 +9382,7 @@
           const count = Number(d.count);
           return { url, count: Number.isFinite(count) ? count : 0 };
         }).filter((x) => x.url && x.count > 0);
-        topOpenedDocsCache = { at: Date.now(), docs };
+        if (docs.length) setTopOpenedDocsCache(docs);
         return docs;
       } catch (e) {
         console.warn(
@@ -13369,8 +13465,13 @@
       if (/canary branch coming soon/i.test(t)) return "notice-alert-info";
       if (/link ratings back up/i.test(t)) return "notice-alert-info";
       if (/develop for proxies with ease/i.test(t)) return "notice-alert-info";
+      if (/errors with link clicks and ratings/i.test(t)) return "notice-alert-warning";
       return "";
     }
+
+    const NOTICE_EXPIRES_RE = /<!--\s*expires:\s*([^>]+?)\s*-->/i;
+    /** Earliest future `<!-- expires: ISO -->` seen in the last notices render (ms), or 0. */
+    let nextImportantNoticeExpiryMs = 0;
 
     function renderUpdateNoticeMarkdown(noticesText) {
       const text = String(noticesText || "").replace(/\r\n/g, "\n").trim();
@@ -13395,7 +13496,18 @@
         if (hm) {
           const level = hm[1].length;
           const title = hm[2].trim();
-          const body = (hm[3] || "").trim();
+          let body = (hm[3] || "").trim();
+          const em = body.match(NOTICE_EXPIRES_RE);
+          if (em) {
+            body = body.replace(NOTICE_EXPIRES_RE, "").trim();
+            const expMs = Date.parse(em[1]);
+            if (Number.isFinite(expMs)) {
+              if (Date.now() >= expMs) continue;
+              if (!nextImportantNoticeExpiryMs || expMs < nextImportantNoticeExpiryMs) {
+                nextImportantNoticeExpiryMs = expMs;
+              }
+            }
+          }
           const tag = level <= 2 ? "h2" : "h3";
           const alertClass = importantNoticeAlertClass(title);
           if (alertClass) chunks.push('<div class="' + alertClass + '">');
@@ -13599,10 +13711,20 @@
       openUpdateModal(meta, stored);
     }
 
+    let importantNoticeExpiryTimer = null;
+
     function applyImportantNotices(meta) {
       const md = meta && meta.important_notices;
+      nextImportantNoticeExpiryMs = 0;
       importantNoticesStaticHtml = md && String(md).trim() ? renderMarkdownLiteNotices(String(md)) : "";
       refreshImportantNoticesDom();
+      if (importantNoticeExpiryTimer) clearTimeout(importantNoticeExpiryTimer);
+      importantNoticeExpiryTimer = null;
+      const waitMs = nextImportantNoticeExpiryMs - Date.now();
+      // setTimeout overflows past ~24.8 days; far-off expiries are handled on the next load.
+      if (nextImportantNoticeExpiryMs && waitMs > 0 && waitMs < 2 ** 31 - 1) {
+        importantNoticeExpiryTimer = setTimeout(() => applyImportantNotices(meta), waitMs + 1000);
+      }
     }
 
     const FACET_HOVER_TIPS = {
@@ -14668,6 +14790,13 @@
         if (/Failed to fetch|NetworkError|Load failed|blocked by CORS|timeout after|AbortError/i.test(msg)) {
           lead =
             "Could not reach <code>data.json</code>. Start a local server in the <code>docs</code> folder (for example <code>python -m http.server 8080</code>) and open <code>http://localhost:8080/</code>.";
+        } else if (/Could not load (?:list data|data\.json).*HTTP 500|data\.json \(500\)/i.test(msg)) {
+          const onUv = /\/uv\/|ultraviolet|\/service\//i.test(
+            String(location.href || "") + String(location.pathname || "")
+          );
+          lead = onUv
+            ? "The Ultraviolet proxy returned HTTP 500 for list assets (not a missing <code>data.json</code> on the site). This usually means UV’s URL rewriter/client hooks failed for this transport — try Scramjet, or Ultraviolet with epoxy-tls."
+            : "List data failed with HTTP 500. If you are behind a web proxy, try another proxy or transport; otherwise verify the server can serve <code>data.json</code>.";
         } else if (isFirestorePermissionDenied(e)) {
           lead =
             "Firestore reported permission denied. Deploy the latest <code>docs/firestore.rules</code> to your Firebase project (including <code>linkRatings</code>, <code>linkRatingVotes</code>, <code>linkSaveCounts</code> if you use thumbs / “most saved”), and ensure Authentication is enabled for this host.";

@@ -57,8 +57,67 @@ const MAX_SESSION_ID_LEN = 128;
 const MAX_UID_LEN = 128;
 const MAX_DISPLAY_NAME_LEN = 32;
 const FS_CLICK_CACHE_TTL_SEC = 600;
-const TOP_OPENS_CACHE_TTL_SEC = 300;
+const FS_RATING_CACHE_TTL_SEC = 300;
+const TOP_OPENS_CACHE_TTL_SEC = 1800;
+const TOP_OPENS_FAIL_TTL_SEC = 180;
 const TOP_OPENS_LIMIT = 80;
+const MEM_CACHE_MAX = 20000;
+
+/**
+ * Per-isolate memory cache. Isolates are reused across many requests in a colo, and
+ * unlike the Cache API this costs no subrequests and also works on *.workers.dev.
+ */
+const memCache = new Map();
+
+function memGet(key) {
+  const e = memCache.get(key);
+  if (!e) return undefined;
+  if (e.exp <= Date.now()) {
+    memCache.delete(key);
+    return undefined;
+  }
+  return e.v;
+}
+
+function memSet(key, value, ttlSec) {
+  if (memCache.size >= MEM_CACHE_MAX) {
+    const oldest = memCache.keys().next().value;
+    if (oldest !== undefined) memCache.delete(oldest);
+  }
+  memCache.delete(key);
+  memCache.set(key, { v: value, exp: Date.now() + ttlSec * 1000 });
+}
+
+async function batchCacheRequest(kind, norms) {
+  const sig = await sha256Hex([...norms].sort().join("\n"));
+  return new Request(`https://${kind}-batch.proxy-list.internal/${sig}`);
+}
+
+async function batchCacheGet(kind, norms) {
+  try {
+    const hit = await caches.default.match(await batchCacheRequest(kind, norms));
+    if (!hit) return null;
+    const o = await hit.json();
+    return o && typeof o === "object" ? o : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function batchCachePut(kind, norms, obj, ttlSec, ctx) {
+  if (!ctx || typeof ctx.waitUntil !== "function") return;
+  try {
+    const req = await batchCacheRequest(kind, norms);
+    ctx.waitUntil(
+      caches.default.put(
+        req,
+        new Response(JSON.stringify(obj), {
+          headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${ttlSec}` },
+        })
+      )
+    );
+  } catch (_) {}
+}
 const FIREBASE_AUTH_HELPER_ORIGIN = "https://proxy-list-c06ea.firebaseapp.com";
 
 export default {
@@ -422,12 +481,15 @@ async function importPrivateKey(pem) {
 }
 
 async function getGoogleAccessToken(env) {
+  const memToken = memGet("gtoken");
+  if (memToken) return memToken;
   const cacheKey = "https://token.proxy-list.internal/firebase-access";
   const cache = caches.default;
   const cached = await cache.match(cacheKey);
   if (cached) {
     const data = await cached.json();
     if (data && data.access_token && data.exp * 1000 > Date.now() + 60000) {
+      memSet("gtoken", data.access_token, Math.max(1, data.exp - Math.floor(Date.now() / 1000) - 120));
       return data.access_token;
     }
   }
@@ -468,6 +530,7 @@ async function getGoogleAccessToken(env) {
   const tokenJson = await tokenRes.json();
   const access = tokenJson.access_token;
   const exp = now + Number(tokenJson.expires_in || 3600);
+  memSet("gtoken", access, Math.max(1, exp - now - 120));
   await cache.put(
     cacheKey,
     new Response(JSON.stringify({ access_token: access, exp }), {
@@ -785,24 +848,50 @@ async function firestoreGetCounts(env, norms, ctx) {
   const out = {};
   if (!project || !norms.length) return out;
 
+  const memMissing = [];
+  for (const norm of norms) {
+    const v = memGet("c:" + norm);
+    if (v !== undefined) out[norm] = v;
+    else memMissing.push(norm);
+  }
+  if (!memMissing.length) return out;
+
   // Per-URL Cache API match/put burns subrequests (~2N). Skip cache for larger batches.
-  const useCache = norms.length <= 20;
+  const useCache = memMissing.length <= 20;
   const cache = caches.default;
-  const missing = [];
+  let missing = [];
   if (useCache) {
-    for (const norm of norms) {
+    for (const norm of memMissing) {
       const hash = await sha256Hex(norm);
       const hit = await cache.match(fsClickNormCacheRequest(hash));
       if (hit) {
         out[norm] = Number(await hit.text()) || 0;
+        memSet("c:" + norm, out[norm], FS_CLICK_CACHE_TTL_SEC);
       } else {
         missing.push(norm);
       }
     }
   } else {
-    missing.push(...norms);
+    missing.push(...memMissing);
   }
   if (!missing.length) return out;
+
+  // Visitors page through the same default-sorted chunks, so whole batches repeat.
+  const batchNorms = missing.slice();
+  const batchHit = await batchCacheGet("clicks", batchNorms);
+  if (batchHit) {
+    const stillMissing = [];
+    for (const norm of missing) {
+      if (Object.prototype.hasOwnProperty.call(batchHit, norm)) {
+        out[norm] = Number(batchHit[norm]) || 0;
+        memSet("c:" + norm, out[norm], FS_CLICK_CACHE_TTL_SEC);
+      } else {
+        stillMissing.push(norm);
+      }
+    }
+    missing = stillMissing;
+    if (!missing.length) return out;
+  }
 
   const useAdmin = hasFirebaseAdmin(env);
   let token = null;
@@ -879,12 +968,21 @@ async function firestoreGetCounts(env, norms, ctx) {
     // clients keep disk cache instead of treating missing as 0.
     if (sawAny) {
       out[norm] = total;
+      memSet("c:" + norm, total, FS_CLICK_CACHE_TTL_SEC);
       if (useCache) await cachePutClickNorm(norm, total, ctx);
     } else if (batchOk) {
       // Confirmed empty (batch succeeded, no docs) — safe to report 0.
       out[norm] = 0;
+      memSet("c:" + norm, 0, FS_CLICK_CACHE_TTL_SEC);
       if (useCache) await cachePutClickNorm(norm, 0, ctx);
     }
+  }
+  if (batchOk && !batchHit) {
+    const snapshot = {};
+    for (const norm of batchNorms) {
+      if (Object.prototype.hasOwnProperty.call(out, norm)) snapshot[norm] = out[norm];
+    }
+    await batchCachePut("clicks", batchNorms, snapshot, FS_CLICK_CACHE_TTL_SEC, ctx);
   }
   return out;
 }
@@ -902,7 +1000,8 @@ async function firestoreTopOpens(env, limit) {
   const cap = Math.max(1, Math.min(limit, 100));
   // Pull extra docs so legacy+modern hash pairs for the same URL can be summed
   // before we take the top N unique links.
-  const fetchCap = Math.min(300, Math.max(cap * 4, 120));
+  // Every listed doc is a billed read; 1.5x covers the few legacy/modern duplicates.
+  const fetchCap = Math.min(150, Math.max(Math.ceil(cap * 1.5), 60));
 
   function parseDocFields(fields) {
     if (!fields || typeof fields !== "object") return null;
@@ -1036,7 +1135,10 @@ async function handleRecordClick(request, env, ctx) {
       }
       const edgeCount = await edgeIncrement(norm, ctx);
       if (count == null && edgeCount) count = edgeCount;
-      if (count != null) await cachePutClickNorm(norm, count, ctx);
+      if (count != null) {
+        memSet("c:" + norm, count, FS_CLICK_CACHE_TTL_SEC);
+        await cachePutClickNorm(norm, count, ctx);
+      }
       return json({
         ok: true,
         via: "firestore",
@@ -1105,6 +1207,26 @@ async function firestoreGetRatings(env, norms, ctx) {
   const out = {};
   if (!project || !hasFirebaseAdmin(env) || !norms.length) return out;
 
+  // Cap batch size: avoid per-URL Cache API (each match/put counts as a subrequest).
+  // Free Workers allow ~50 subrequests; token + a few batchGets must stay under that.
+  const capped = [];
+  for (const norm of norms.slice(0, 40)) {
+    const v = memGet("r:" + norm);
+    if (v !== undefined) out[norm] = v;
+    else capped.push(norm);
+  }
+  if (!capped.length) return out;
+
+  const batchHit = await batchCacheGet("ratings", capped);
+  if (batchHit && capped.every((n) => Object.prototype.hasOwnProperty.call(batchHit, n))) {
+    for (const norm of capped) {
+      const r = batchHit[norm] || {};
+      out[norm] = { up: Number(r.up) || 0, down: Number(r.down) || 0 };
+      memSet("r:" + norm, out[norm], FS_RATING_CACHE_TTL_SEC);
+    }
+    return out;
+  }
+
   let token;
   try {
     token = await getGoogleAccessToken(env);
@@ -1112,10 +1234,6 @@ async function firestoreGetRatings(env, norms, ctx) {
     console.error("get_ratings_token_failed", err);
     return out;
   }
-
-  // Cap batch size: avoid per-URL Cache API (each match/put counts as a subrequest).
-  // Free Workers allow ~50 subrequests; token + a few batchGets must stay under that.
-  const capped = norms.slice(0, 40);
 
   const allIds = [];
   const seenId = new Set();
@@ -1192,7 +1310,11 @@ async function firestoreGetRatings(env, norms, ctx) {
     }
     // Always include keys so clients can tell "fetched" from "request failed".
     out[norm] = best;
+    memSet("r:" + norm, best, FS_RATING_CACHE_TTL_SEC);
   }
+  const snapshot = {};
+  for (const norm of capped) snapshot[norm] = out[norm];
+  await batchCachePut("ratings", capped, snapshot, FS_RATING_CACHE_TTL_SEC, ctx);
   return out;
 }
 
@@ -1218,13 +1340,28 @@ async function handleGetRatings(request, env, ctx) {
 }
 
 async function handleTopOpens(request, env, ctx) {
+  const memHit = memGet("top-opens");
+  if (memHit !== undefined) {
+    return cors(
+      new Response(memHit, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": `public, max-age=${TOP_OPENS_CACHE_TTL_SEC}`,
+          "X-Cache": "MEM",
+        },
+      })
+    );
+  }
   const cache = caches.default;
-  const cacheKey = new Request("https://top-opens.proxy-list.internal/v3");
+  const cacheKey = new Request("https://top-opens.proxy-list.internal/v4");
   try {
     const hit = await cache.match(cacheKey);
     if (hit) {
+      const body = await hit.text();
+      memSet("top-opens", body, TOP_OPENS_CACHE_TTL_SEC);
       return cors(
-        new Response(hit.body, {
+        new Response(body, {
           status: 200,
           headers: {
             "Content-Type": "application/json; charset=utf-8",
@@ -1238,13 +1375,16 @@ async function handleTopOpens(request, env, ctx) {
   try {
     const links = await firestoreTopOpens(env, TOP_OPENS_LIMIT);
     const payload = JSON.stringify({ ok: true, links });
+    // Cache failures briefly too, so a quota outage isn't re-queried on every page view.
+    const ttl = links.length > 0 ? TOP_OPENS_CACHE_TTL_SEC : TOP_OPENS_FAIL_TTL_SEC;
+    memSet("top-opens", payload, ttl);
     const res = new Response(payload, {
       headers: {
         "Content-Type": "application/json; charset=utf-8",
-        "Cache-Control": `public, max-age=${TOP_OPENS_CACHE_TTL_SEC}`,
+        "Cache-Control": `public, max-age=${ttl}`,
       },
     });
-    if (links.length > 0 && ctx && typeof ctx.waitUntil === "function") {
+    if (ctx && typeof ctx.waitUntil === "function") {
       ctx.waitUntil(cache.put(cacheKey, res.clone()));
     }
     return cors(res);

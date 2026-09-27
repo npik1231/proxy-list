@@ -1,7 +1,7 @@
 # Proxy List
 > [!NOTE]
 > v7.3.5 | Released: September 25, 2026
-> r294 | Last Updated: September 27, 2026
+> r295 | Last Updated: September 27, 2026
 > Total onsite links: 51518 (51175 sorted + 343 unsorted)\
 > https://yourworstnightmare1.github.io/proxy-list/
 <br>
@@ -15,8 +15,12 @@ Welcome to the official Proxy List! This has a running list of hundreds of unblo
 
 ## Important Notices
 
+### Errors with Link Clicks and Ratings
+<!-- expires: 2026-09-27T07:00:00Z -->
+I am aware that link click counts, ratings, and other things dependent on Firebase are currently not working because our quota is being exceeded constantly, I am working to resolve these issues as quickly as I can to get the list back up and running properly by heavily optimizing the site. Should be fixed by September 27.
+
 ### Develop For Proxies With Ease
-Try out my newest project, the [Proxy Development Toolkit](https://github.com/yourworstnightmare1/proxy-development-toolkit)! Easily design and test your websites around proxy functionality, with support for Scramjet and Ultraviolet, 5 different transport methods, and more, supercharged with MCP support for your favorite AI coding agents such as Cursor, Claude, Codex, and more.
+Try out my newest project, the [Proxy Development Toolkit](https://github.com/yourworstnightmare1/proxy-development-toolkit)! Easily design and test your websites around proxy functionality, with support for Scramjet and Ultraviolet, modern transports (epoxy-tls, wisp-js, and libcurl-transport), and more, supercharged with MCP support for your favorite AI coding agents such as Cursor, Claude, Codex, and more.
 
 ### Google Forms Deprecated
 Google Forms is now deprecated and can no longer be used to submit links or report bugs in favor of our multi-use, more refined, and easier to use on-site submission form framework. [Contribute to the list here](./contribute/)

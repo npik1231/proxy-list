@@ -2182,6 +2182,7 @@
 
   async function fetchTopClicks(db, limit) {
     var cap = Math.max(1, Math.min(limit || 25, 50));
+    var workerAnswered = false;
     try {
       var res = await fetch(
         typeof window.ProxyListPresence !== "undefined" && window.ProxyListPresence.apiUrl
@@ -2192,6 +2193,7 @@
       if (res.ok) {
         var data = await res.json();
         if (data && data.ok && Array.isArray(data.links)) {
+          workerAnswered = true;
           var out = data.links
             .map(function (x) {
               return {
@@ -2203,14 +2205,13 @@
               return x.url && Number.isFinite(x.count) && x.count > 0;
             })
             .slice(0, cap);
-          // If the API endpoint can't access click/open data, it may return an
-          // empty list. When Firestore is available, fall back so the stats page
-          // can still display real opens.
           if (out.length) return out;
         }
       }
     } catch (_) {}
-    if (!db) return [];
+    // Empty Worker answer = its Firestore read failed (usually quota); only query
+    // directly when the Worker itself is unreachable.
+    if (!db || workerAnswered) return [];
     var snap = await db.collection("link_clicks").orderBy("count", "desc").limit(cap).get();
     return snap.docs
       .map(function (doc) {

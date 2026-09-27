@@ -3,8 +3,8 @@
   "entries": [
     {
       "version": "v7.3.5",
-      "revision": "r293",
-      "released": "September 25, 2026",
+      "revision": "r295",
+      "released": "September 27, 2026",
       "update_notice": "### Fixed\n- Fixed bug causing user to be unable to scroll list on searches due to a 20 row cap"
     },
     {
