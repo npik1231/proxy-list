@@ -690,6 +690,12 @@
     close: closeModal,
     start: runExport,
     copy: runCopy,
+    // Used by scripts/build_offline_release.js so release assets match on-site downloads.
+    build: {
+      html: buildOfflineHtml,
+      markdown: buildListMarkdown,
+      text: buildListText,
+    },
   };
 
   if (document.readyState === "loading") {

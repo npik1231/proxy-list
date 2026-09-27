@@ -1,0 +1,88 @@
+name: Offline release
+
+# Publish a GitHub release with zipped offline copies (HTML full/lite, .md, .txt) whenever
+# docs/data.json reaches a version+revision that has no release yet.
+# Bot commits pushed with GITHUB_TOKEN don't trigger `push`, hence workflow_run.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/data.json"
+  workflow_run:
+    workflows:
+      - "Auto Update Proxy Links"
+      - "Sync approved submissions"
+      - "Silent data export"
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: offline-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Resolve release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="$(node -e "const m=require('./docs/data.json').meta||{};process.stdout.write(String(m.version||'').trim()+String(m.revision||'').trim())")"
+          if [ -z "$tag" ]; then
+            echo "::error::docs/data.json has no version/revision"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; nothing to do."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+          prev="$(gh release list --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName // ""')"
+          echo "prev=$prev" >> "$GITHUB_OUTPUT"
+          echo "New release $tag (previous: ${prev:-none})"
+
+      - name: Build offline assets
+        if: steps.tag.outputs.exists == 'false'
+        run: |
+          node scripts/build_offline_release.js --out dist --prev-tag "${{ steps.tag.outputs.prev }}"
+
+      - name: Publish release
+        if: steps.tag.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          shopt -s nullglob
+          files=(dist/*.html dist/*.md dist/*.txt)
+          assets=()
+          # Zip each file on its own (~98% smaller) so people can grab just the one they need.
+          # proxy-list-<tag>-<type>.<format> -> proxy-list-<tag>-<type>-<format>.zip
+          for f in "${files[@]}"; do
+            [ "$(basename "$f")" = "RELEASE_NOTES.md" ] && continue
+            zipname="${f%.*}-${f##*.}.zip"
+            zip -9 -j -q "$zipname" "$f"
+            assets+=("$zipname")
+          done
+          gh release create "$tag" "${assets[@]}" \
+            --title "$tag" \
+            --notes-file dist/RELEASE_NOTES.md \
+            --target "$(git rev-parse HEAD)" \
+            --latest
