@@ -2263,7 +2263,7 @@ Try out my newest project, the [Proxy Development Toolkit](https://github.com/yo
 > [!NOTE]
 > | Category | Capabilities | Protocol(s) | Links |
 > | - | - | - | - |
-> | Proxy/Games | GDB:gn-math | Scramjet | 78 |
+> | Proxy/Games | GDB:gn-math | Scramjet | 76 |
 
 > [!IMPORTANT]
 > Rosin does not have CAPTCHA support. Websites that require human verification (like YouTube) will not work or display properly.
@@ -2323,8 +2323,6 @@ Try out my newest project, the [Proxy Development Toolkit](https://github.com/yo
 | | https://webigganag.gigaportal.pl | 8/11/2026 | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
 | | https://switchthelarp.pendawa.or.id | 8/11/2026 | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
 | | https://that.smakar.com | 8/11/2026 | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
-| | https://901fde7c.azithromycinc.quest/ | 9/13/2026 | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
-| | https://950be06c.synthroid.pics/ | 9/13/2026 | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
 | | https://springwaterbaptist.org/ | 9/13/2026 | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
 | | https://swepcraft.sbs/ | 9/13/2026 | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
 | | https://synthroid.pics/ | 9/13/2026 | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
@@ -2882,19 +2880,6 @@ Try out my newest project, the [Proxy Development Toolkit](https://github.com/yo
 | - | - | - | - | - | - |
 | | https://script.google.com/macros/s/AKfycbxFgc6eMlC97epFZSuIWDjGvJ-q--hrqPJB_KrFIDazL1iKDfoosQ2w_5jWOxLMi5HndA/exec | N/A | N/A | N/A | [Vexo Sirramenboi](https://github.com/Vexo-Sirramenboi)
 | | https://script.google.com/macros/s/AKfycby0904KOR73LkC1iymAOSjOpkLfuDLfvaTvICEgc78AsPofM4qn2e-3Y4UA_5prDTFhpQ/exec | N/A | N/A | N/A | [Vexo Sirramenboi](https://github.com/Vexo-Sirramenboi)
-
-# 🔺 Vertix
-> [!NOTE]
-> | Category | Capabilities | Protocol(s) | Links |
-> | - | - | - | - |
-> | Proxy/Games | unknown | Ultraviolet | 1 |
-
-> [!IMPORTANT]
-> This section has not been categorized or checked for protocol(s) and capabilities.
-
-| Locked | Link | Found Date | Username | Password | Contributor |
-| - | - | - | - | - | - |
-| | https://div7ikqm4o515.cloudfront.net/ | 4/21/2026 | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
 
 # 🫘 Sea Bean
 > [!NOTE]
