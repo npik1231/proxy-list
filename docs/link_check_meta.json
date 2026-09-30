@@ -1,12 +1,8 @@
 {
-  "checked_at": "2026-09-30T17:38:24Z",
-  "checked_at_display": "2026-09-30 17:38 UTC",
+  "checked_at": "2026-09-30T21:58:17Z",
+  "checked_at_display": "2026-09-30 21:58 UTC",
   "added_count": 0,
-  "removed_count": 3,
+  "removed_count": 0,
   "added_links": [],
-  "removed_links": [
-    "https://coinjars.1234.granular.com.au",
-    "https://fishdom.1234.granular.com.au",
-    "https://theory-prof38.becasuniversitarias.org"
-  ]
+  "removed_links": []
 }
