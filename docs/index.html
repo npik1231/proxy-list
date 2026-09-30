@@ -4,6 +4,36 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script>
+    /*
+     * Some proxy/transport combos (e.g. Ultraviolet + wisp-js) serve this page without
+     * rewriting it, so relative assets resolve to /uv/service/<file> and 500. When the
+     * raw proxy path is visible, point relative URLs at the decoded destination.
+     */
+    (function () {
+      try {
+        var m = location.pathname.match(/\/(?:service|scramjet)\/(.+)$/i);
+        if (!m) return;
+        var raw = m[1] + location.search;
+        var dec = raw;
+        try {
+          dec = decodeURIComponent(raw);
+        } catch (_) {}
+        var target = dec;
+        if (!/^https?:\/\//i.test(target)) {
+          target = "";
+          for (var i = 0; i < dec.length; i++) {
+            target += i % 2 ? String.fromCharCode(dec.charCodeAt(i) ^ 2) : dec.charAt(i);
+          }
+        }
+        if (!/^https?:\/\//i.test(target)) return;
+        var base = document.createElement("base");
+        base.href = new URL("./", target).href;
+        document.head.insertBefore(base, document.head.firstChild);
+        window.__PROXY_LIST_UNREWRITTEN_PROXY_BASE__ = base.href;
+      } catch (_) {}
+    })();
+  </script>
+  <script>
     (function () {
       try {
         var p = new URLSearchParams(location.search);
@@ -393,8 +423,11 @@
       vertical-align: middle;
     }
     .rating-count-hint {
+      display: inline-block;
+      min-width: 2.4em;
       margin-left: 0.25rem;
       font-size: 0.72rem;
+      font-variant-numeric: tabular-nums;
     }
     .folder-rating-inline {
       display: inline-flex;
@@ -1577,6 +1610,7 @@
       text-align: right;
       white-space: nowrap;
       font-variant-numeric: tabular-nums;
+      min-width: 3.5rem;
     }
     /* Main list + most-opened: long URLs need room; horizontal scroll beats one-char columns */
     .table-chunk-wrap th:nth-child(2),
@@ -1972,6 +2006,11 @@
       /* Dimming comes from the highlight ring shadow so targets stay fully bright. */
       background: transparent;
       pointer-events: none;
+      /* Must stack above the spotlit sidebar/highlight (z-index 45/46). */
+      z-index: 50;
+    }
+    .summary-backdrop.welcome-tour-backdrop.welcome-tour-backdrop--step.welcome-tour-backdrop--top {
+      align-items: flex-start;
     }
     .summary-backdrop.welcome-tour-backdrop.welcome-tour-backdrop--step .welcome-tour-modal {
       pointer-events: auto;
@@ -1982,6 +2021,29 @@
       box-shadow:
         0 16px 36px rgba(0, 0, 0, 0.55),
         0 0 0 1px rgba(255, 255, 255, 0.06);
+    }
+    html.welcome-tour-compact .summary-backdrop.welcome-tour-backdrop.welcome-tour-backdrop--step {
+      justify-content: center;
+      padding: 0.5rem;
+    }
+    html.welcome-tour-compact .summary-modal.welcome-tour-modal.welcome-tour-modal--step {
+      width: min(560px, 100%);
+      max-height: 46vh;
+    }
+    html.welcome-tour-compact .welcome-tour-modal--step .summary-head {
+      padding: 0.55rem 0.8rem;
+    }
+    html.welcome-tour-compact .welcome-tour-modal--step .welcome-tour-body {
+      gap: 0.55rem;
+      padding: 0.65rem 0.8rem 0.75rem;
+    }
+    html.welcome-tour-compact .welcome-tour-modal--step .welcome-tour-actions {
+      margin-top: 0;
+    }
+    @media (max-height: 560px) {
+      html.welcome-tour-compact .welcome-tour-modal--step .welcome-tour-video-wrap {
+        display: none;
+      }
     }
     html.welcome-tour-spotlighting .sidebar-column {
       position: relative;
@@ -4596,14 +4658,53 @@
       if (typeof syncSidebarToggleLabel === "function") syncSidebarToggleLabel();
     }
 
+    let welcomeTourPlacementTimer = 0;
+    let welcomeTourPlacementWired = false;
+
+    function isWelcomeTourCompactViewport() {
+      if (document.documentElement.getAttribute("data-device") === "mobile") return true;
+      try {
+        return !!(window.matchMedia && window.matchMedia("(max-width: 840px), (max-height: 560px)").matches);
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function placeWelcomeTourStepModal() {
+      const bd = $("welcomeTourBackdrop");
+      if (!bd || !bd.classList.contains("welcome-tour-backdrop--step")) return;
+      const compact = isWelcomeTourCompactViewport();
+      document.documentElement.classList.toggle("welcome-tour-compact", compact);
+      const target = document.querySelector(".welcome-tour-highlight");
+      let top = false;
+      if (compact && target) {
+        const r = target.getBoundingClientRect();
+        top = r.top + r.height / 2 > window.innerHeight / 2;
+      }
+      bd.classList.toggle("welcome-tour-backdrop--top", top);
+    }
+
+    function scheduleWelcomeTourStepPlacement() {
+      placeWelcomeTourStepModal();
+      clearTimeout(welcomeTourPlacementTimer);
+      welcomeTourPlacementTimer = setTimeout(placeWelcomeTourStepModal, 450);
+      if (!welcomeTourPlacementWired) {
+        welcomeTourPlacementWired = true;
+        window.addEventListener("resize", () => {
+          if (isWelcomeTourOpen()) scheduleWelcomeTourStepPlacement();
+        });
+      }
+    }
+
     function clearWelcomeTourHighlights() {
-      document.documentElement.classList.remove("welcome-tour-spotlighting");
+      clearTimeout(welcomeTourPlacementTimer);
+      document.documentElement.classList.remove("welcome-tour-spotlighting", "welcome-tour-compact");
       document.querySelectorAll(".welcome-tour-highlight").forEach((el) => {
         el.classList.remove("welcome-tour-highlight", "welcome-tour-highlight--secondary");
       });
       const bd = $("welcomeTourBackdrop");
       const modal = bd && bd.querySelector(".welcome-tour-modal");
-      if (bd) bd.classList.remove("welcome-tour-backdrop--step");
+      if (bd) bd.classList.remove("welcome-tour-backdrop--step", "welcome-tour-backdrop--top");
       if (modal) modal.classList.remove("welcome-tour-modal--step");
     }
 
@@ -4633,15 +4734,18 @@
         if (!first) first = el;
         applied += 1;
       }
+      const compact = isWelcomeTourCompactViewport();
+      document.documentElement.classList.toggle("welcome-tour-compact", compact);
       if (first && typeof first.scrollIntoView === "function") {
         try {
-          first.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+          first.scrollIntoView({ block: compact ? "center" : "nearest", inline: "nearest", behavior: "smooth" });
         } catch (_) {
           try {
             first.scrollIntoView(true);
           } catch (__) {}
         }
       }
+      scheduleWelcomeTourStepPlacement();
     }
 
     function hasCompletedWelcomeTour() {
@@ -8500,11 +8604,13 @@
     function repaintLinkRatingCellsForHash(hash) {
       if (!hash) return;
       const sel = 'td.link-rating-cell[data-rating-hash="' + cssEscapeAttrValue(hash) + '"]';
-      document.querySelectorAll(sel).forEach((td) => {
-        const tr = td.closest("tr");
-        const a = tr && tr.querySelector("a.js-link-summary[data-link]");
-        const linkUrl = a ? a.getAttribute("data-link") : "";
-        setHtml(td, ratingCellInnerHtmlForLinkUrl(linkUrl));
+      withStableLinkRows(() => {
+        document.querySelectorAll(sel).forEach((td) => {
+          const tr = td.closest("tr");
+          const a = tr && tr.querySelector("a.js-link-summary[data-link]");
+          const linkUrl = a ? a.getAttribute("data-link") : "";
+          setHtml(td, ratingCellInnerHtmlForLinkUrl(linkUrl));
+        });
       });
     }
 
@@ -9003,10 +9109,12 @@
       }
       const stamp = (currentListVersionStamp || "").trim();
       if (stamp) persistClickCountDiskCache(stamp, [norm]);
-      document.querySelectorAll("td.click-cell[data-click-url]").forEach((td) => {
-        const link = td.getAttribute("data-click-url") || "";
-        if (normalizeUrlKeyForClicks(link) !== norm) return;
-        td.textContent = String(next);
+      withStableLinkRows(() => {
+        document.querySelectorAll("td.click-cell[data-click-url]").forEach((td) => {
+          const link = td.getAttribute("data-click-url") || "";
+          if (normalizeUrlKeyForClicks(link) !== norm) return;
+          td.textContent = String(next);
+        });
       });
     }
 
@@ -11192,7 +11300,7 @@
               '<p class="sub">Only rows from this site’s sorted list can be added. Search by URL, provider, or contributor — anything not on the list is rejected.</p>' +
               '<label class="sub" for="folderTrustedSearch">Search the list</label>' +
               '<input type="search" class="folder-meta-input" id="folderTrustedSearch" placeholder="Provider, URL, contributor…" autocomplete="off" style="margin-top:0.25rem;display:block;width:100%;max-width:40rem" />' +
-              '<div class="folder-trusted-results" id="folderTrustedResults" role="listbox" aria-label="Matching list links"><!-- rows injected by script --></div>' +
+              '<div class="folder-trusted-results" id="folderTrustedResults" role="listbox" aria-label="Matching list links"></div>' +
               '<div class="folder-chrome-row"><button type="button" class="btn" id="folderImportSavedBtn">Import starred links (list only)</button></div>';
           } else {
             const ev = folderVisibilityFromDoc(folderDocSnap);
@@ -11495,9 +11603,89 @@
       return wrap.getBoundingClientRect().top + window.scrollY;
     }
 
-    function paintVirtualTableWindow(force) {
+    function virtualTableDataRows(tbody) {
+      return tbody.querySelectorAll(
+        "tr:not(.virtual-pad-top):not(.virtual-pad-bottom):not(.table-row-skeleton)"
+      );
+    }
+
+    /** First data row still visible below the sticky header, as { index, top }. */
+    function captureVirtualTableAnchor(st) {
+      if (!st || st.windowStart < 0) return null;
+      const rows = virtualTableDataRows(st.tbody);
+      const thead = st.tbody.closest("table") && st.tbody.closest("table").querySelector("thead");
+      const minY = Math.max(0, thead ? thead.getBoundingClientRect().bottom : 0);
+      for (let i = 0; i < rows.length; i++) {
+        const rect = rows[i].getBoundingClientRect();
+        if (rect.bottom > minY) return { index: st.windowStart + i, top: rect.top };
+      }
+      return null;
+    }
+
+    /**
+     * Rows wrap to different heights, so `start * rowH` padding never matches the rows it
+     * replaces. Without this, every repaint nudges rows under the pointer (clicks land on
+     * the neighbouring row's rating buttons). Re-pin the anchor row to its old position.
+     */
+    function restoreVirtualTableAnchor(st, anchor) {
+      if (!anchor || !st) return;
+      const rows = virtualTableDataRows(st.tbody);
+      const offset = anchor.index - st.windowStart;
+      if (offset < 0 || offset >= rows.length) return;
+      const delta = (rows[offset].getBoundingClientRect().top - anchor.top) / getDebugCullingScale();
+      if (Math.abs(delta) < 0.5) return;
+      const padTd = st.tbody.querySelector("tr.virtual-pad-top > td");
+      if (!padTd) return;
+      const nextPad = (parseFloat(padTd.style.height) || 0) - delta;
+      padTd.style.height = Math.max(0, nextPad) + "px";
+      if (nextPad < 0) window.scrollBy(0, -nextPad);
+    }
+
+    function captureLinkRowAnchor(tbody) {
+      const rows = virtualTableDataRows(tbody);
+      const table = tbody.closest("table");
+      const thead = table && table.querySelector("thead");
+      const minY = Math.max(0, thead ? thead.getBoundingClientRect().bottom : 0);
+      for (let i = 0; i < rows.length; i++) {
+        const rect = rows[i].getBoundingClientRect();
+        if (rect.bottom > minY) return { row: rows[i], top: rect.top };
+      }
+      return null;
+    }
+
+    /**
+     * Apply a cell update without moving rows under the pointer. Rating / open-count text
+     * changes resize auto-width columns and re-wrap rows, which shifted neighbouring rows'
+     * rating buttons under a click in progress.
+     */
+    function withStableLinkRows(update) {
+      const tbody = $("linksTableBody");
+      const anchor = tbody && tbody.isConnected ? captureLinkRowAnchor(tbody) : null;
+      update();
+      if (!anchor || !anchor.row.isConnected) return;
+      const delta = (anchor.row.getBoundingClientRect().top - anchor.top) / getDebugCullingScale();
+      if (Math.abs(delta) < 0.5) return;
+      const padTd = tbody.querySelector("tr.virtual-pad-top > td");
+      const pad = padTd ? parseFloat(padTd.style.height) || 0 : 0;
+      if (padTd && pad - delta >= 0) padTd.style.height = pad - delta + "px";
+      else window.scrollBy(0, delta);
+    }
+
+    /** Track the real average row height so the window math drifts less between repaints. */
+    function refineVirtualTableRowHeight(st) {
+      const rows = virtualTableDataRows(st.tbody);
+      if (rows.length < 4) return;
+      let sum = 0;
+      for (let i = 0; i < rows.length; i++) sum += rows[i].offsetHeight;
+      const avg = sum / rows.length;
+      if (!(avg > 0)) return;
+      st.rowHeight = Math.max(TABLE_ROW_HEIGHT, (st.rowHeight * 3 + avg) / 4);
+    }
+
+    function paintVirtualTableWindow(force, anchorIn) {
       const st = tableVirtualState;
       if (!st || !st.tbody || !st.tbody.isConnected) return;
+      const anchor = anchorIn || captureVirtualTableAnchor(st);
       const wrapTop = getTableChunkWrapTop();
       const table = st.tbody.closest("table");
       const thead = table && table.querySelector("thead");
@@ -11544,12 +11732,14 @@
           if (measured > TABLE_ROW_HEIGHT) {
             st.rowHeight = measured;
             st.rowHeightMeasured = true;
-            paintVirtualTableWindow(true);
+            paintVirtualTableWindow(true, anchor);
             return;
           }
           st.rowHeightMeasured = true;
         }
       }
+      restoreVirtualTableAnchor(st, anchor);
+      refineVirtualTableRowHeight(st);
       if (shouldLoadLinkClicks()) {
         void refreshClickCellsForSlice(slice, 0, { silent: true, virtualSlice: true });
       }
@@ -11713,13 +11903,15 @@
         ? tbody.querySelectorAll("tr:not(.virtual-pad-top):not(.virtual-pad-bottom):not(.table-row-skeleton)")
         : null;
       const rowAt = (i) => (virtualSlice ? dataRows[i] : tbody.children[start + i]);
-      for (let i = 0; i < rowsSlice.length; i++) {
-        const tr = rowAt(i);
-        if (!tr || !tr.querySelector) continue;
-        const ratingTd = tr.querySelector("td.link-rating-cell");
-        const link = rowsSlice[i] && rowsSlice[i].link ? String(rowsSlice[i].link) : "";
-        if (ratingTd && link) setHtml(ratingTd, ratingCellInnerHtmlForLinkUrl(link));
-      }
+      withStableLinkRows(() => {
+        for (let i = 0; i < rowsSlice.length; i++) {
+          const tr = rowAt(i);
+          if (!tr || !tr.querySelector) continue;
+          const ratingTd = tr.querySelector("td.link-rating-cell");
+          const link = rowsSlice[i] && rowsSlice[i].link ? String(rowsSlice[i].link) : "";
+          if (ratingTd && link) setHtml(ratingTd, ratingCellInnerHtmlForLinkUrl(link));
+        }
+      });
       if (!shouldLoadLinkClicks()) return;
       const targets = [];
       for (let i = 0; i < rowsSlice.length; i++) {
@@ -11754,10 +11946,12 @@
       }
       if (shouldContinue && !shouldContinue()) return;
       if (!tbody.isConnected) return;
-      for (const t of targets) {
-        if (!t.td || !t.td.isConnected) continue;
-        t.td.textContent = String(countForUrl(map, t.link));
-      }
+      withStableLinkRows(() => {
+        for (const t of targets) {
+          if (!t.td || !t.td.isConnected) continue;
+          t.td.textContent = String(countForUrl(map, t.link));
+        }
+      });
     }
 
     async function appendNextTableChunk() {
@@ -13468,8 +13662,10 @@
       return "";
     }
 
-    const NOTICE_EXPIRES_RE = /<!--\s*expires:\s*([^>]+?)\s*-->/i;
-    /** Earliest future `<!-- expires: ISO -->` seen in the last notices render (ms), or 0. */
+    // Escaped so this inline script never contains a literal HTML comment open/close:
+    // Scramjet's HTML rewriter strips those and breaks the whole script.
+    const NOTICE_EXPIRES_RE = /<\!--\s*expires:\s*([^>]+?)\s*--\>/i;
+    /** Earliest future "expires: ISO" notice comment seen in the last notices render (ms), or 0. */
     let nextImportantNoticeExpiryMs = 0;
 
     function renderUpdateNoticeMarkdown(noticesText) {
@@ -14140,9 +14336,10 @@
       listPayload.catch((err) => {
         throw err && err.message ? err : new Error("Could not load list data");
       }),
-      fetch("checked_domains.txt")
-        .then((r) => (r.ok ? r.text() : ""))
-        .catch(() => ""),
+      (window.ProxyListData && window.ProxyListData.fetchTextAsset
+        ? window.ProxyListData.fetchTextAsset("checked_domains.txt", { timeoutMs: 20000 })
+        : fetch("checked_domains.txt").then((r) => (r.ok ? r.text() : ""))
+      ).catch(() => ""),
     ])
       .then(([, json, checkedDomainsText]) => {
         reportContentLoadingProgress(35, "Getting data...");

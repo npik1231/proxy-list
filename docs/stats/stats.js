@@ -2180,7 +2180,51 @@
     }
   }
 
+  var LS_TOP_OPENS_LAST_GOOD = "proxyList_stats_topOpens_v1";
+
+  function saveTopOpensLastGood(rows) {
+    try {
+      localStorage.setItem(LS_TOP_OPENS_LAST_GOOD, JSON.stringify({ at: Date.now(), rows: rows }));
+    } catch (_) {}
+  }
+
+  function readTopOpensLastGood() {
+    try {
+      var o = JSON.parse(localStorage.getItem(LS_TOP_OPENS_LAST_GOOD) || "null");
+      return o && Array.isArray(o.rows) ? o : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /** Live top opens, falling back to the last good copy (Worker or this browser) when Firestore is out of quota. */
   async function fetchTopClicks(db, limit) {
+    state.topOpensStale = false;
+    var rows = [];
+    try {
+      rows = await fetchTopClicksLive(db, limit);
+    } catch (err) {
+      var cachedOnError = readTopOpensLastGood();
+      if (!cachedOnError || !cachedOnError.rows.length) throw err;
+      rows = [];
+    }
+    if (rows.length && !rows.stale) {
+      saveTopOpensLastGood(rows);
+      return rows;
+    }
+    if (rows.length) {
+      state.topOpensStale = true;
+      return rows;
+    }
+    var cached = readTopOpensLastGood();
+    if (cached && cached.rows.length) {
+      state.topOpensStale = true;
+      return cached.rows;
+    }
+    return rows;
+  }
+
+  async function fetchTopClicksLive(db, limit) {
     var cap = Math.max(1, Math.min(limit || 25, 50));
     var workerAnswered = false;
     try {
@@ -2205,6 +2249,7 @@
               return x.url && Number.isFinite(x.count) && x.count > 0;
             })
             .slice(0, cap);
+          if (data.stale) out.stale = true;
           if (out.length) return out;
         }
       }
@@ -2808,7 +2853,12 @@
       setText("statOpens", formatInt(totalOpens));
       if (!clicks.length) {
         setNotice(
-          "No link-open data yet. Opens appear after visitors open links on the main list.",
+          "Link-open data is temporarily unavailable (the Firebase daily read quota may be used up). Try again later.",
+          "warn"
+        );
+      } else if (state.topOpensStale) {
+        setNotice(
+          "Showing the last saved link-open data. Live counts are temporarily unavailable (Firebase daily read quota).",
           "warn"
         );
       } else {

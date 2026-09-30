@@ -56,10 +56,12 @@ const MAX_URL_LEN = 2048;
 const MAX_SESSION_ID_LEN = 128;
 const MAX_UID_LEN = 128;
 const MAX_DISPLAY_NAME_LEN = 32;
-const FS_CLICK_CACHE_TTL_SEC = 600;
+const FS_CLICK_CACHE_TTL_SEC = 3600;
 const FS_RATING_CACHE_TTL_SEC = 300;
 const TOP_OPENS_CACHE_TTL_SEC = 1800;
 const TOP_OPENS_FAIL_TTL_SEC = 180;
+const TOP_OPENS_LAST_GOOD_TTL_SEC = 7 * 86400;
+const TOP_OPENS_LAST_GOOD_REQ = new Request("https://top-opens.proxy-list.internal/last-good");
 const TOP_OPENS_LIMIT = 80;
 const MEM_CACHE_MAX = 20000;
 
@@ -1374,9 +1376,42 @@ async function handleTopOpens(request, env, ctx) {
 
   try {
     const links = await firestoreTopOpens(env, TOP_OPENS_LIMIT);
-    const payload = JSON.stringify({ ok: true, links });
+    let payload = JSON.stringify({ ok: true, links });
     // Cache failures briefly too, so a quota outage isn't re-queried on every page view.
     const ttl = links.length > 0 ? TOP_OPENS_CACHE_TTL_SEC : TOP_OPENS_FAIL_TTL_SEC;
+    if (links.length > 0) {
+      memSet("top-opens-last-good", payload, TOP_OPENS_LAST_GOOD_TTL_SEC);
+      if (ctx && typeof ctx.waitUntil === "function") {
+        ctx.waitUntil(
+          cache.put(
+            TOP_OPENS_LAST_GOOD_REQ,
+            new Response(payload, {
+              headers: {
+                "Content-Type": "application/json; charset=utf-8",
+                "Cache-Control": `public, max-age=${TOP_OPENS_LAST_GOOD_TTL_SEC}`,
+              },
+            })
+          )
+        );
+      }
+    } else {
+      // Firestore read failed (usually quota): serve the last good list instead of an empty one.
+      let lastGood = memGet("top-opens-last-good");
+      if (lastGood === undefined) {
+        try {
+          const hit = await cache.match(TOP_OPENS_LAST_GOOD_REQ);
+          if (hit) lastGood = await hit.text();
+        } catch (_) {}
+      }
+      if (lastGood) {
+        try {
+          const o = JSON.parse(lastGood);
+          if (o && Array.isArray(o.links) && o.links.length) {
+            payload = JSON.stringify({ ok: true, links: o.links, stale: true });
+          }
+        } catch (_) {}
+      }
+    }
     memSet("top-opens", payload, ttl);
     const res = new Response(payload, {
       headers: {

@@ -2,6 +2,12 @@
   "_note": "Archived site update notices. Regenerate history with: python3 scripts/build_update_changelog.py",
   "entries": [
     {
+      "version": "v7.3.6",
+      "revision": "r297",
+      "released": "September 30, 2026",
+      "update_notice": "### Fixed\n- Fixed critical bugs that occurred that broke access to the list on Scramjet and Ultraviolet. Users on those proxies should be able to view the site properly again."
+    },
+    {
       "version": "v7.3.5",
       "revision": "r295",
       "released": "September 27, 2026",

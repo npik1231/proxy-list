@@ -192,6 +192,30 @@
     return out;
   }
 
+  /**
+   * Absolute copies of the docs/ assets, tried only after every relative URL fails.
+   * Some proxy/transport combos (e.g. Ultraviolet + wisp-js) resolve relative URLs
+   * against the proxy's own /service/ path and 500; absolute URLs still go through.
+   */
+  var REMOTE_ASSET_BASES = [
+    "https://yourworstnightmare1.github.io/proxy-list/",
+    "https://cdn.jsdelivr.net/gh/yourworstnightmare1/proxy-list@main/docs/",
+  ];
+
+  function remoteAssetUrlCandidates(name) {
+    var out = [];
+    var extra = global.__PROXY_LIST_ASSET_MIRRORS__;
+    var bases = (Array.isArray(extra) ? extra : []).concat(REMOTE_ASSET_BASES);
+    var seen = {};
+    for (var i = 0; i < bases.length; i++) {
+      var b = String(bases[i] || "");
+      if (!b) continue;
+      if (b.charAt(b.length - 1) !== "/") b += "/";
+      addUniqueUrl(out, seen, b + name);
+    }
+    return out;
+  }
+
   function fetchWithTimeout(url, init, timeoutMs) {
     var ms = timeoutMs > 0 ? timeoutMs : 0;
     if (!ms) return fetch(url, init || {});
@@ -284,12 +308,23 @@
     return out;
   }
 
-  async function fetchJsonAsset(name, options) {
+  function fetchJsonAsset(name, options) {
+    return fetchAsset(name, options, readJsonResponse);
+  }
+
+  function fetchTextAsset(name, options) {
+    return fetchAsset(name, options, function (res) {
+      return res.text();
+    });
+  }
+
+  async function fetchAsset(name, options, read) {
     var opts = options || {};
     var base = opts.baseUrl != null ? opts.baseUrl : listAssetBaseUrl();
     var timeoutMs = opts.timeoutMs != null ? opts.timeoutMs : 20000;
     var errors = [];
     var candidates = listAssetUrlCandidates(name, base);
+    if (opts.remoteFallback !== false) candidates = candidates.concat(remoteAssetUrlCandidates(name));
     for (var i = 0; i < candidates.length; i++) {
       var url = candidates[i];
       try {
@@ -298,7 +333,7 @@
           errors.push(url + " HTTP " + res.status);
           continue;
         }
-        return readJsonResponse(res);
+        return await read(res);
       } catch (err) {
         errors.push(url + ": " + (err && err.message ? err.message : String(err)));
       }
@@ -347,38 +382,54 @@
       ? ["data.json.gz", "data.json.br", "data.json"]
       : ["data.json", "data.json.gz", "data.json.br"];
     var errors = [];
+    var MISS = {};
+
+    async function tryFile(file, fetchUrl) {
+      try {
+        if (typeof opts.onAttempt === "function") {
+          try {
+            opts.onAttempt(file, fetchUrl);
+          } catch (_) {}
+        }
+        var res = await fetchWithTimeout(fetchUrl, opts.fetchInit || {}, timeoutMs);
+        if (!res.ok) {
+          errors.push(fetchUrl + " HTTP " + res.status);
+          return MISS;
+        }
+        if (file.endsWith(".gz") || file.endsWith(".br")) {
+          var buf = await res.arrayBuffer();
+          if (file.endsWith(".gz")) {
+            return await parseJsonBytes(buf);
+          }
+          if (typeof DecompressionStream !== "function") {
+            errors.push(fetchUrl + " (brotli unsupported)");
+            return MISS;
+          }
+          var dsBr = new DecompressionStream("brotli");
+          var streamBr = new Response(new Blob([buf]).stream().pipeThrough(dsBr));
+          return await readJsonResponse(streamBr);
+        }
+        return await readJsonResponse(res);
+      } catch (err) {
+        errors.push(fetchUrl + ": " + (err && err.message ? err.message : String(err)));
+        return MISS;
+      }
+    }
+
     for (var f = 0; f < files.length; f++) {
-      var file = files[f];
-      var candidates = listAssetUrlCandidates(file, base);
+      var candidates = listAssetUrlCandidates(files[f], base);
       for (var c = 0; c < candidates.length; c++) {
-        var fetchUrl = candidates[c];
-        try {
-          if (typeof opts.onAttempt === "function") {
-            try {
-              opts.onAttempt(file, fetchUrl);
-            } catch (_) {}
-          }
-          var res = await fetchWithTimeout(fetchUrl, opts.fetchInit || {}, timeoutMs);
-          if (!res.ok) {
-            errors.push(fetchUrl + " HTTP " + res.status);
-            continue;
-          }
-          if (file.endsWith(".gz") || file.endsWith(".br")) {
-            var buf = await res.arrayBuffer();
-            if (file.endsWith(".gz")) {
-              return await parseJsonBytes(buf);
-            }
-            if (typeof DecompressionStream !== "function") {
-              errors.push(fetchUrl + " (brotli unsupported)");
-              continue;
-            }
-            var dsBr = new DecompressionStream("brotli");
-            var streamBr = new Response(new Blob([buf]).stream().pipeThrough(dsBr));
-            return readJsonResponse(streamBr);
-          }
-          return readJsonResponse(res);
-        } catch (err) {
-          errors.push(fetchUrl + ": " + (err && err.message ? err.message : String(err)));
+        var got = await tryFile(files[f], candidates[c]);
+        if (got !== MISS) return got;
+      }
+    }
+    if (opts.remoteFallback !== false) {
+      var remoteFiles = typeof DecompressionStream === "function" ? ["data.json.gz", "data.json"] : ["data.json"];
+      for (var rf = 0; rf < remoteFiles.length; rf++) {
+        var remote = remoteAssetUrlCandidates(remoteFiles[rf]);
+        for (var r = 0; r < remote.length; r++) {
+          var gotRemote = await tryFile(remoteFiles[rf], remote[r]);
+          if (gotRemote !== MISS) return gotRemote;
         }
       }
     }
@@ -395,12 +446,14 @@
     expandAllLinks: expandAllLinks,
     expandAllLinksAsync: expandAllLinksAsync,
     fetchJsonAsset: fetchJsonAsset,
+    fetchTextAsset: fetchTextAsset,
     linkCount: linkCount,
     isRelativeUrl: isRelativeUrl,
     directoryOfSrc: directoryOfSrc,
     listAssetBaseUrl: listAssetBaseUrl,
     resolveListAssetUrl: resolveListAssetUrl,
     listAssetUrlCandidates: listAssetUrlCandidates,
+    remoteAssetUrlCandidates: remoteAssetUrlCandidates,
     fetchListPayload: fetchListPayload,
   };
 })(typeof window !== "undefined" ? window : globalThis);
