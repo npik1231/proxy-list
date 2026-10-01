@@ -1,7 +1,7 @@
 # Proxy List
 > [!NOTE]
 > v7.3.6 | Released: September 30, 2026
-> r297 | Last Updated: September 30, 2026
+> r298 | Last Updated: September 30, 2026
 > Total onsite links: 51518 (51175 sorted + 343 unsorted)\
 > https://yourworstnightmare1.github.io/proxy-list/
 <br>
@@ -15,6 +15,9 @@ Welcome to the official Proxy List! This has a running list of hundreds of unblo
 
 ## Important Notices
 
+### Having Trouble Viewing The List?
+If the list is appearing as a blank screen or throws an error message, [follow the steps on this page based on your browser to fix the issue](./fix-loading/index.html).
+
 ### Errors with Link Clicks and Ratings
 <!-- expires: 2026-09-27T07:00:00Z -->
 I am aware that link click counts, ratings, and other things dependent on Firebase are currently not working because our quota is being exceeded constantly, I am working to resolve these issues as quickly as I can to get the list back up and running properly by heavily optimizing the site. Should be fixed by September 27.
@@ -26,6 +29,7 @@ Try out my newest project, the [Proxy Development Toolkit](https://github.com/yo
 
 ### Fixed
 - Fixed critical bugs that occurred that broke access to the list on Scramjet and Ultraviolet. Users on those proxies should be able to view the site properly again.
+- Added system to detect bad saved site data and replaces it with new data to fix an issue that causes the list to not load anything. If you're still having problems, [click here](./fix-loading/index.html).
 
 # 💜 Selenite
 > [!NOTE]

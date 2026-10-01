@@ -34,6 +34,180 @@
     })();
   </script>
   <script>
+    /*
+     * Boot guard: stale or corrupt saved data (often left on a proxy's origin by an older
+     * build) can stop the list from ever rendering. Loads that end in a script error or
+     * never finish are recorded; after two in a row, this site's saved data is cleared
+     * before the main script reads it. A recovery card offers a manual reset either way.
+     * Must stay first-party-free and run before any script that reads storage.
+     */
+    (function () {
+      var GUARD_KEY = "proxyList_bootGuard_v1";
+      var KEEP_KEYS = {
+        "proxyList_saved_links_v1": 1,
+        "proxyList_welcomeTour_v1": 1,
+        "proxylist:last-seen-version": 1,
+        "proxylist:last-seen-banner-stamp": 1
+      };
+      var IDB_NAMES = ["proxyListSettings"];
+      var AUTO_RESET_AFTER = 2;
+      var WATCHDOG_MS = 45000;
+      var HELP_URL = "fix-loading/";
+      var done = false;
+      var cardEl = null;
+
+      function isSiteKey(k) {
+        return /^proxy[-_]?list[_:]/i.test(String(k || "")) || /^pl_submit_/.test(String(k || ""));
+      }
+      function readGuard() {
+        try {
+          var g = JSON.parse(localStorage.getItem(GUARD_KEY) || "null");
+          return g && typeof g === "object" ? g : {};
+        } catch (_) {
+          return {};
+        }
+      }
+      function writeGuard(g) {
+        try {
+          localStorage.setItem(GUARD_KEY, JSON.stringify(g));
+        } catch (_) {}
+      }
+      function clearSiteData(opts) {
+        var all = !!(opts && opts.all);
+        var removed = 0;
+        [window.localStorage, window.sessionStorage].forEach(function (store) {
+          try {
+            if (!store) return;
+            var keys = [];
+            for (var i = 0; i < store.length; i++) keys.push(store.key(i));
+            keys.forEach(function (k) {
+              if (!isSiteKey(k) || k === GUARD_KEY) return;
+              if (!all && KEEP_KEYS[k]) return;
+              store.removeItem(k);
+              removed++;
+            });
+          } catch (_) {}
+        });
+        IDB_NAMES.forEach(function (name) {
+          try {
+            if (window.indexedDB) indexedDB.deleteDatabase(name);
+          } catch (_) {}
+        });
+        return removed;
+      }
+      function markFailed(reason) {
+        if (done) return;
+        var g = readGuard();
+        if (!g.failed) {
+          g.failed = true;
+          g.reason = String(reason || "").slice(0, 200);
+          writeGuard(g);
+        }
+        showCard(g.reason);
+      }
+
+      var prev = readGuard();
+      var fails = Number(prev.fails) || 0;
+      if (prev.pending && prev.failed) fails++;
+      var autoReset = false;
+      if (fails >= AUTO_RESET_AFTER) {
+        clearSiteData({ all: false });
+        autoReset = true;
+        fails = 0;
+      }
+      writeGuard({ pending: true, failed: false, fails: fails, started: Date.now(), autoReset: autoReset });
+
+      function el(tag, attrs, text) {
+        var n = document.createElement(tag);
+        for (var k in attrs) if (Object.prototype.hasOwnProperty.call(attrs, k)) n.setAttribute(k, attrs[k]);
+        if (text) n.textContent = text;
+        return n;
+      }
+      function hideCard() {
+        if (cardEl && cardEl.parentNode) cardEl.parentNode.removeChild(cardEl);
+        cardEl = null;
+      }
+      function showCard(reason, note) {
+        if (done && !note) return;
+        if (!document.body) {
+          document.addEventListener("DOMContentLoaded", function () { showCard(reason, note); });
+          return;
+        }
+        hideCard();
+        cardEl = el("div", {
+          role: note ? "status" : "alert",
+          style:
+            "position:fixed;right:16px;bottom:16px;z-index:2147483000;max-width:380px;" +
+            "background:#16161d;color:#e8e8ee;border:1px solid #3a3a48;border-radius:10px;" +
+            "padding:14px 16px;font:13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;" +
+            "box-shadow:0 8px 28px rgba(0,0,0,.45)"
+        });
+        var title = el("strong", { style: "display:block;margin-bottom:4px;font-size:14px" },
+          note ? "Saved data was reset" : "The list isn't loading");
+        var body = el("div", { style: "opacity:.85" }, note ||
+          "Old saved data from a previous visit (on this site or this proxy) can stop the list from loading. " +
+          "Resetting it usually fixes this. Your saved links are kept.");
+        cardEl.appendChild(title);
+        cardEl.appendChild(body);
+        if (reason && !note) {
+          cardEl.appendChild(el("div", { style: "margin-top:6px;opacity:.6;font-size:12px;word-break:break-word" },
+            "Details: " + reason));
+        }
+        var row = el("div", { style: "display:flex;flex-wrap:wrap;gap:8px;margin-top:10px" });
+        var btnCss = "cursor:pointer;border-radius:6px;padding:6px 10px;font:inherit;border:1px solid #4a4a5c;background:#24242e;color:inherit";
+        if (!note) {
+          var reset = el("button", { type: "button", style: btnCss + ";background:#6d28d9;border-color:#6d28d9;color:#fff" },
+            "Reset saved data & reload");
+          reset.addEventListener("click", function () {
+            clearSiteData({ all: false });
+            writeGuard({ fails: 0 });
+            location.reload();
+          });
+          row.appendChild(reset);
+        }
+        var help = el("a", { href: HELP_URL, target: "_blank", rel: "noopener", style: btnCss + ";text-decoration:none" },
+          "How to fix it manually");
+        row.appendChild(help);
+        var close = el("button", { type: "button", style: btnCss }, "Dismiss");
+        close.addEventListener("click", hideCard);
+        row.appendChild(close);
+        cardEl.appendChild(row);
+        document.body.appendChild(cardEl);
+      }
+
+      window.addEventListener("error", function (e) {
+        if (done || !e || !e.message) return;
+        if (/SyntaxError|Unexpected (?:token|identifier|end of input)|Invalid or unexpected token/i.test(e.message)) {
+          markFailed(e.message);
+        }
+      });
+      var watchdog = setTimeout(function () {
+        markFailed("The list did not finish loading within " + Math.round(WATCHDOG_MS / 1000) + " seconds.");
+      }, WATCHDOG_MS);
+
+      window.__proxyListBootGuard = {
+        ok: function () {
+          if (done) return;
+          done = true;
+          clearTimeout(watchdog);
+          writeGuard({ fails: 0 });
+          if (cardEl) hideCard();
+          if (autoReset) {
+            showCard("", "The list failed to load twice, so this site's saved data (settings, filters, and caches) " +
+              "was reset automatically. Your saved links were kept.");
+            setTimeout(hideCard, 12000);
+          }
+        },
+        fail: markFailed,
+        reset: function (opts) {
+          clearSiteData(opts);
+          writeGuard({ fails: 0 });
+        },
+        helpUrl: HELP_URL
+      };
+    })();
+  </script>
+  <script>
     (function () {
       try {
         var p = new URLSearchParams(location.search);
@@ -3626,6 +3800,11 @@
             <p class="settings-desc">View the first-visit walkthrough again (filters, search, updates, statistics, and settings).</p>
             <button class="btn" id="settingsReplayWelcomeTourBtn" type="button">View welcome tour</button>
           </div>
+          <div class="settings-field">
+            <span class="settings-label">Reset Saved Data</span>
+            <p class="settings-desc">Clears this site's saved settings, filters, and caches in this browser (or on this proxy), then reloads. Use this if the list stops loading or behaves strangely. Your saved links are kept. <a href="fix-loading/" target="_blank" rel="noopener">Manual steps</a></p>
+            <button class="btn" id="settingsResetSavedDataBtn" type="button">Reset saved data</button>
+          </div>
         </div>
         <div class="settings-section">
           <h3>Filters &amp; Links</h3>
@@ -4916,6 +5095,17 @@
           renderWelcomeTourStep(welcomeTourStepIndex - 1);
         });
       }
+    }
+
+    function wireResetSavedDataButton() {
+      const btn = $("settingsResetSavedDataBtn");
+      if (!btn || btn.dataset.wired === "1") return;
+      btn.dataset.wired = "1";
+      btn.addEventListener("click", () => {
+        if (!window.confirm("Reset this site's saved settings, filters, and caches, then reload? Your saved links are kept.")) return;
+        if (window.__proxyListBootGuard) window.__proxyListBootGuard.reset({ all: false });
+        location.reload();
+      });
     }
 
     function wireWelcomeTourReplayButton() {
@@ -14291,6 +14481,7 @@
     wireSidebarToggle();
     wireOfflineExportOpen();
     wireWelcomeTourReplayButton();
+    wireResetSavedDataButton();
 
     setContentLoading(true, { progress: 0, message: "Getting data..." });
     applyImportantNotices({});
@@ -14961,6 +15152,7 @@
         }
 
         return runInitialRender().then(() => {
+          if (window.__proxyListBootGuard) window.__proxyListBootGuard.ok();
           finishContentLoading();
           if ($("folderTrustedResults")) refreshFolderTrustedSearchUI(folderTrustedSearchLastQuery);
           maybeStartWelcomeTour();
@@ -14997,10 +15189,28 @@
           lead =
             "Firestore reported permission denied. Deploy the latest <code>docs/firestore.rules</code> to your Firebase project (including <code>linkRatings</code>, <code>linkRatingVotes</code>, <code>linkSaveCounts</code> if you use thumbs / “most saved”), and ensure Authentication is enabled for this host.";
         }
+        const guard = window.__proxyListBootGuard;
+        const networkLike = /Failed to fetch|NetworkError|Load failed|timeout after|AbortError/i.test(msg);
+        if (guard) {
+          if (networkLike) guard.ok();
+          else guard.fail(msg);
+        }
         setHtml(
           $("tableWrap"),
-          '<p class="err">' + lead + "<br><br><strong>Details:</strong> " + escapeHtml(msg) + "</p>"
+          '<p class="err">' + lead + "<br><br><strong>Details:</strong> " + escapeHtml(msg) + "</p>" +
+            (guard && !networkLike
+              ? '<p class="err">Old saved data from a previous visit can cause this. ' +
+                '<button class="btn" type="button" id="loadErrorResetBtn">Reset saved data &amp; reload</button> ' +
+                '<a href="' + escapeHtml(guard.helpUrl) + '" target="_blank" rel="noopener">How to fix it manually</a></p>'
+              : "")
         );
+        const resetBtn = $("loadErrorResetBtn");
+        if (resetBtn) {
+          resetBtn.addEventListener("click", () => {
+            guard.reset({ all: false });
+            location.reload();
+          });
+        }
       });
     }
   </script>
