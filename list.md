@@ -1,8 +1,8 @@
 # Proxy List
 > [!NOTE]
-> v7.3.9 | Released: October 1, 2026
-> r300 | Last Updated: October 1, 2026
-> Total onsite links: 51502 (51159 sorted + 343 unsorted)\
+> v7.3.10 | Released: October 1, 2026
+> r301 | Last Updated: October 1, 2026
+> Total onsite links: 51494 (51151 sorted + 343 unsorted)\
 > https://yourworstnightmare1.github.io/proxy-list/
 <br>
 Welcome to the official Proxy List! This has a running list of hundreds of unblocked websites and games that anyone is free to use. We have the most popular and reliable sites here, so you'll never run out!
@@ -28,7 +28,7 @@ Try out my newest project, the [Proxy Development Toolkit](https://github.com/yo
 ## Update Notice
 
 ### Fixed
-- Fixed a bug that caused headers in update notices show formatting
+- Fixed malformed usernames appearing in the contributor list
 
 # 💜 Selenite
 > [!NOTE]
