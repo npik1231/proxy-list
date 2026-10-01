@@ -1530,6 +1530,10 @@ Try out my newest project, the [Proxy Development Toolkit](https://github.com/yo
 | | https://cdn.jsdelivr.net/gh/lucideproxy/svg@latest/index.svg | 8/17/2026 | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
 | | https://gcore.jsdelivr.net/npm/@lucideproxy/svg@latest/index.svg | 8/17/2026 | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
 | | https://cooking.deepee.com | 8/17/2026 | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
+|  | https://master.robertschulze.name | 9/4/2026 | N/A | N/A | [Vexo-Sirramenboi](https://github.com/Vexo-Sirramenboi)
+|  | https://lunar.record-point.com.au | 9/4/2026 | N/A | N/A | [Vexo-Sirramenboi](https://github.com/Vexo-Sirramenboi)
+|  | https://amazinging.krepche.com | 9/4/2026 | N/A | N/A | [Vexo-Sirramenboi](https://github.com/Vexo-Sirramenboi)
+|  | https://digit.rocketpride.com | 9/4/2026 | N/A | N/A | [Vexo-Sirramenboi](https://github.com/Vexo-Sirramenboi)
 
 # 👻 Ghost
 > [!NOTE]
@@ -2494,6 +2498,8 @@ Try out my newest project, the [Proxy Development Toolkit](https://github.com/yo
 | | https://s3.amazonaws.com/mathshelp/index.html | 8/29/2026 | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
 | | https://s3.us-east-1.amazonaws.com/mathshelp/index.html | 8/29/2026 | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
 | | https://s3.dualstack.us-east-1.amazonaws.com/mathshelp/index.html | 8/29/2026 | N/A | N/A | [yourworstnightmare1](https://github.com/yourworstnightmare1)
+|  | https://morning.rocketpride.com | 9/4/2026 | N/A | N/A | [Vexo-Sirramenboi](https://github.com/Vexo-Sirramenboi)
+|  | https://new.robertschulze.name | 9/4/2026 | N/A | N/A | [Vexo-Sirramenboi](https://github.com/Vexo-Sirramenboi)
 
 # 🍓 Strawberri
 > [!NOTE]
@@ -49239,6 +49245,8 @@ Try out my newest project, the [Proxy Development Toolkit](https://github.com/yo
 | | https://zinc-browser.vercel.app/ | 8/9/2026 | N/A | N/A | [0800](https://github.com/0800WebDev)
 |  | https://zinc.math.bumon.ar/ | 8/20/2026 | N/A | N/A | [0800](https://github.com/0800WebDev)
 |  | https://zinc-proxy.vercel.app/ | 8/20/2026 | N/A | N/A | [0800](https://github.com/0800WebDev)
+|  | https://learn.meridiano.com.br | 9/3/2026 | N/A | N/A | [0800](https://github.com/0800WebDev)
+|  | https://zinc.happy0.co.uk | 9/3/2026 | N/A | N/A | [0800](https://github.com/0800WebDev)
 
 # 🌫️ Mist
 > [!NOTE]
