@@ -1808,12 +1808,30 @@
     if (state.selectedFilter) selectFilter(state.selectedFilter);
   }
 
+  function normalizeContributorLabel(raw) {
+    var s = String(raw || "").trim();
+    if (!s) return "Anonymous Contributor";
+    // Complete markdown: [Name](https://...)
+    var m = s.match(/^\[([^\]]+)\]\(([^)]+)\)\s*$/);
+    if (m) return String(m[1] || "").trim() || "Anonymous Contributor";
+    // Truncated / unclosed markdown keys that previously leaked into totals JSON.
+    m = s.match(/^\[([^\]]+)\]\((.*)$/);
+    if (m) return String(m[1] || "").trim() || "Anonymous Contributor";
+    return s;
+  }
+
   function renderContributors(payload) {
     var contribs = (payload && payload.contributors) || {};
-    var rows = Object.keys(contribs)
+    var merged = {};
+    Object.keys(contribs).forEach(function (key) {
+      var c = contribs[key] || {};
+      var name = normalizeContributorLabel(key);
+      var n = Number(c.links_total) || 0;
+      if (!merged[name] || n > merged[name]) merged[name] = n;
+    });
+    var rows = Object.keys(merged)
       .map(function (name) {
-        var c = contribs[name] || {};
-        return [name, Number(c.links_total) || 0];
+        return [name, merged[name]];
       })
       .filter(function (r) {
         return r[1] > 0;
