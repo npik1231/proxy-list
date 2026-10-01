@@ -602,7 +602,15 @@
     }
 
     function normalizeContributorName(raw) {
-      return String(raw || "").trim() || "Anonymous Contributor";
+      let s = String(raw || "").trim();
+      if (!s) return "Anonymous Contributor";
+      // Complete markdown link: [Name](https://...)
+      let m = s.match(/^\[([^\]]+)\]\(([^)]+)\)\s*$/);
+      if (m) return String(m[1] || "").trim() || "Anonymous Contributor";
+      // Truncated / unclosed markdown that previously leaked into totals keys.
+      m = s.match(/^\[([^\]]+)\]\((.*)$/);
+      if (m) return String(m[1] || "").trim() || "Anonymous Contributor";
+      return s;
     }
 
     function githubUsernameFromHref(href) {
@@ -709,22 +717,27 @@
           const totalsPayload = await totalsRes.json();
           const raw = totalsPayload && totalsPayload.contributors;
           if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-            const list = Object.keys(raw)
-              .map((key) => {
-                const v = raw[key];
-                let count = 0;
-                let href = "";
-                if (typeof v === "number") {
-                  count = v;
-                } else if (v && typeof v === "object") {
-                  count = Number(v.links_total != null ? v.links_total : v.count) || 0;
-                  const u = v.contributor_url;
-                  if (u && /^https?:\/\//i.test(String(u).trim())) href = String(u).trim();
-                }
-                const name = contributorLabel(key, href);
-                return { name, count, href };
-              })
-              .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+            const byName = new Map();
+            for (const key of Object.keys(raw)) {
+              const v = raw[key];
+              let count = 0;
+              let href = "";
+              if (typeof v === "number") {
+                count = v;
+              } else if (v && typeof v === "object") {
+                count = Number(v.links_total != null ? v.links_total : v.count) || 0;
+                const u = v.contributor_url;
+                if (u && /^https?:\/\//i.test(String(u).trim())) href = String(u).trim();
+              }
+              const name = contributorLabel(key, href);
+              if (!byName.has(name)) byName.set(name, { name, count: 0, href: "" });
+              const entry = byName.get(name);
+              entry.count = Math.max(entry.count, count);
+              if (!entry.href && href) entry.href = href;
+            }
+            const list = [...byName.values()].sort(
+              (a, b) => b.count - a.count || a.name.localeCompare(b.name)
+            );
 
             if (!list.length) {
               setHtml(bodyEl, '<tr><td class="muted" colspan="2">No contributors found yet.</td></tr>');

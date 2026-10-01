@@ -66,12 +66,24 @@ def split_list_field(s: str) -> list[str]:
 
 
 _CONTRIBUTOR_MD = re.compile(r"^\[([^\]]+)\]\(([^)]+)\)\s*$")
+# Truncated / unclosed markdown links that previously leaked into contributor totals keys.
+_CONTRIBUTOR_MD_PARTIAL = re.compile(r"^\[([^\]]+)\]\((.*)$")
 
 
 def normalize_contributor_name(raw: str) -> str:
-    """Match docs/contribute/index.html normalizeContributorName for stable JSON keys."""
+    """Stable JSON keys; strip complete or truncated markdown-link wrappers."""
     s = (raw or "").strip()
-    return s if s else "Anonymous Contributor"
+    if not s:
+        return "Anonymous Contributor"
+    m = _CONTRIBUTOR_MD.match(s)
+    if m:
+        label = m.group(1).strip()
+        return label if label else "Anonymous Contributor"
+    m2 = _CONTRIBUTOR_MD_PARTIAL.match(s)
+    if m2:
+        label = m2.group(1).strip()
+        return label if label else "Anonymous Contributor"
+    return s
 
 
 def parse_contributor_cell(raw: str) -> tuple[str, str | None]:
@@ -80,6 +92,10 @@ def parse_contributor_cell(raw: str) -> tuple[str, str | None]:
     m = _CONTRIBUTOR_MD.match(s)
     if m:
         return m.group(1).strip(), m.group(2).strip() or None
+    m2 = _CONTRIBUTOR_MD_PARTIAL.match(s)
+    if m2:
+        # Truncated markdown (missing ')'); keep the label only — the URL may be cut off.
+        return m2.group(1).strip(), None
     if s == "yourworstnightmare1":
         return s, "https://github.com/yourworstnightmare1"
     return s, None
@@ -639,21 +655,37 @@ def load_contributor_totals(path: Path) -> dict[str, dict[str, object]]:
         return {}
     out: dict[str, dict[str, object]] = {}
     for k, v in raw.items():
-        name = normalize_contributor_name(str(k))
+        # Prefer parse_contributor_cell so truncated "[name](url" keys fold into name.
+        parsed_name, parsed_url = parse_contributor_cell(str(k))
+        name = normalize_contributor_name(parsed_name)
         if isinstance(v, int):
-            out[name] = {"links_total": max(0, v), "contributor_url": None}
+            n = max(0, v)
+            url = parsed_url
+        elif isinstance(v, dict):
+            lt = v.get("links_total", v.get("count", 0))
+            try:
+                n = max(0, int(lt))
+            except (TypeError, ValueError):
+                n = 0
+            url_raw = v.get("contributor_url")
+            url = url_raw.strip() if isinstance(url_raw, str) and url_raw.strip() else parsed_url
+        else:
             continue
-        if not isinstance(v, dict):
+        prev = out.get(name)
+        if prev is None:
+            out[name] = {"links_total": n, "contributor_url": url}
             continue
-        lt = v.get("links_total", v.get("count", 0))
         try:
-            n = max(0, int(lt))
+            prev_n = max(0, int(prev.get("links_total", 0)))
         except (TypeError, ValueError):
-            n = 0
-        url = v.get("contributor_url")
+            prev_n = 0
+        prev_u = prev.get("contributor_url")
         out[name] = {
-            "links_total": n,
-            "contributor_url": url.strip() if isinstance(url, str) and url.strip() else None,
+            "links_total": max(prev_n, n),
+            "contributor_url": (
+                prev_u if isinstance(prev_u, str) and prev_u.strip() else None
+            )
+            or url,
         }
     return out
 
