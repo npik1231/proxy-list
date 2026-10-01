@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-30T23:22:31Z",
-  "snapshot_date": "2026-09-30",
+  "generated_at": "2026-10-01T00:24:41Z",
+  "snapshot_date": "2026-10-01",
   "catalog_count": 22,
   "total_entries": 30243,
   "unique_games": 25952,
@@ -979,10 +979,39 @@
       },
       "total_entries": 30243,
       "unique_games": 25952
+    },
+    {
+      "date": "2026-10-01",
+      "counts": {
+        "gdb:unblockedzone": 0,
+        "gdb:gn-math": 837,
+        "gdb:luminsdk": 837,
+        "gdb:noahs-tutoring": 406,
+        "gdb:elite-games": 325,
+        "gdb:ultimate-game-stash": 2446,
+        "gdb:seraph": 500,
+        "gdb:chicken-kings-vault": 821,
+        "gdb:lucide": 837,
+        "gdb:sdxp": 0,
+        "gdb:duckmath": 498,
+        "gdb:ccported": 22,
+        "gdb:selenite": 266,
+        "gdb:radon": 302,
+        "gdb:truffled": 0,
+        "gdb:totally-science": 0,
+        "gdb:petezah": 1121,
+        "gdb:frogies-arcade": 0,
+        "gdb:space": 0,
+        "gdb:boredom": 11,
+        "gdb:dogeub": 20739,
+        "gdb:utopia": 275
+      },
+      "total_entries": 30243,
+      "unique_games": 25952
     }
   ],
   "latest_changes": {
-    "date": "2026-09-30",
+    "date": "2026-10-01",
     "is_baseline": false,
     "by_catalog": {
       "gdb:unblockedzone": {
@@ -996,28 +1025,18 @@
       },
       "gdb:gn-math": {
         "label": "gn-math",
-        "added": [
-          "Gang Beasts",
-          "Lethal Company",
-          "Team Fortress 2",
-          "Web Dashers"
-        ],
+        "added": [],
         "removed": [],
-        "added_count": 4,
+        "added_count": 0,
         "removed_count": 0,
         "added_truncated": 0,
         "removed_truncated": 0
       },
       "gdb:luminsdk": {
         "label": "Lumin SDK",
-        "added": [
-          "Gang Beasts",
-          "Lethal Company",
-          "Team Fortress 2",
-          "Web Dashers"
-        ],
+        "added": [],
         "removed": [],
-        "added_count": 4,
+        "added_count": 0,
         "removed_count": 0,
         "added_truncated": 0,
         "removed_truncated": 0
@@ -1069,14 +1088,9 @@
       },
       "gdb:lucide": {
         "label": "Lucide",
-        "added": [
-          "Gang Beasts",
-          "Lethal Company",
-          "Team Fortress 2",
-          "Web Dashers"
-        ],
+        "added": [],
         "removed": [],
-        "added_count": 4,
+        "added_count": 0,
         "removed_count": 0,
         "added_truncated": 0,
         "removed_truncated": 0
@@ -1200,76 +1214,23 @@
       }
     },
     "all": {
-      "added": [
-        {
-          "name": "Gang Beasts",
-          "tag": "gdb:gn-math",
-          "label": "gn-math"
-        },
-        {
-          "name": "Gang Beasts",
-          "tag": "gdb:luminsdk",
-          "label": "Lumin SDK"
-        },
-        {
-          "name": "Gang Beasts",
-          "tag": "gdb:lucide",
-          "label": "Lucide"
-        },
-        {
-          "name": "Lethal Company",
-          "tag": "gdb:gn-math",
-          "label": "gn-math"
-        },
-        {
-          "name": "Lethal Company",
-          "tag": "gdb:luminsdk",
-          "label": "Lumin SDK"
-        },
-        {
-          "name": "Lethal Company",
-          "tag": "gdb:lucide",
-          "label": "Lucide"
-        },
-        {
-          "name": "Team Fortress 2",
-          "tag": "gdb:gn-math",
-          "label": "gn-math"
-        },
-        {
-          "name": "Team Fortress 2",
-          "tag": "gdb:luminsdk",
-          "label": "Lumin SDK"
-        },
-        {
-          "name": "Team Fortress 2",
-          "tag": "gdb:lucide",
-          "label": "Lucide"
-        },
-        {
-          "name": "Web Dashers",
-          "tag": "gdb:gn-math",
-          "label": "gn-math"
-        },
-        {
-          "name": "Web Dashers",
-          "tag": "gdb:luminsdk",
-          "label": "Lumin SDK"
-        },
-        {
-          "name": "Web Dashers",
-          "tag": "gdb:lucide",
-          "label": "Lucide"
-        }
-      ],
+      "added": [],
       "removed": [],
-      "added_count": 12,
+      "added_count": 0,
       "removed_count": 0,
       "added_truncated": 0,
       "removed_truncated": 0
     }
   },
   "modifications": [
+    {
+      "date": "2026-10-01",
+      "kind": "diff",
+      "catalogs_touched": [],
+      "added": 0,
+      "removed": 0,
+      "by_catalog": []
+    },
     {
       "date": "2026-09-30",
       "kind": "diff",
