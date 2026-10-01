@@ -99,8 +99,10 @@
     return reasonModal;
   }
 
-  function showReason(text) {
+  function showReason(text, title) {
     ensureReasonModal();
+    var heading = $("toastReasonTitle");
+    if (heading) heading.textContent = title || "Why";
     var body = $("toastReasonBody");
     if (body) body.textContent = text || "No reason was provided.";
     reasonModal.classList.add("open");
@@ -227,7 +229,17 @@
     }
   }
 
-  function actionsFor(kind) {
+  function actionsFor(kind, n) {
+    if (
+      (kind === "links_approved" ||
+        kind === "feature_approved" ||
+        kind === "bug_approved" ||
+        kind === "appeal_lifted") &&
+      n &&
+      n.reason
+    ) {
+      return ["comment", "close"];
+    }
     if (
       kind === "issue_closed" ||
       kind === "issue_reopened" ||
@@ -321,7 +333,7 @@
 
     var actions = document.createElement("div");
     actions.className = "site-toast-actions";
-    actionsFor(kind).forEach(function (act) {
+    actionsFor(kind, n).forEach(function (act) {
       if (act === "open" && n.url) {
         var a = document.createElement("a");
         a.className = "btn";
@@ -339,6 +351,15 @@
           showReason(n.reason || "No reason was provided.");
         });
         actions.appendChild(why);
+      } else if (act === "comment") {
+        var comment = document.createElement("button");
+        comment.type = "button";
+        comment.className = "btn";
+        comment.textContent = "See comment";
+        comment.addEventListener("click", function () {
+          showReason(n.reason, "Comment from the maintainer");
+        });
+        actions.appendChild(comment);
       } else if (act === "close") {
         var close = document.createElement("button");
         close.type = "button";

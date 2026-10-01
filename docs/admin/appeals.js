@@ -86,14 +86,16 @@
     );
   }
 
-  async function liftBan(uid, viaAppeal) {
+  async function liftBan(uid, viaAppeal, comment) {
     if (!uid) return;
     await db.collection("contributorBans").doc(uid).delete();
     await db.collection("contributorStats").doc(uid).set(
       { submitBlocked: false, updated: firebase.firestore.FieldValue.serverTimestamp() },
       { merge: true }
     );
-    await notifyUser(uid, { kind: viaAppeal ? "appeal_lifted" : "wait_lifted" });
+    var notice = { kind: viaAppeal ? "appeal_lifted" : "wait_lifted" };
+    if (comment) notice.reason = comment;
+    await notifyUser(uid, notice);
   }
 
   async function loadBans() {
@@ -267,16 +269,26 @@
         var id = btn.getAttribute("data-appeal-id");
         var uid = btn.getAttribute("data-appeal-uid");
         if (!id) return;
+        var comment = "";
+        if (act === "approve") {
+          var entered = window.prompt(
+            "Optional comment for the user (leave blank for none, Cancel to stop):",
+            ""
+          );
+          if (entered === null) return;
+          comment = String(entered).trim().slice(0, 2000);
+        }
         btn.disabled = true;
         try {
           if (act === "approve") {
             if (!uid) throw new Error("Missing submitter UID");
             await db.collection("suspensionAppeals").doc(id).update({
               status: "approved",
+              reviewNote: comment,
               reviewedByUid: currentUser.uid,
               updated: firebase.firestore.FieldValue.serverTimestamp(),
             });
-            await liftBan(uid, true);
+            await liftBan(uid, true, comment);
           } else if (act === "deny") {
             var reason =
               window.prompt("Reason for denying this appeal (shown to the user):", "") ||

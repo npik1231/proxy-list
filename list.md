@@ -1,7 +1,7 @@
 # Proxy List
 > [!NOTE]
-> v7.3.6 | Released: September 30, 2026
-> r298 | Last Updated: September 30, 2026
+> v7.3.8 | Released: September 30, 2026
+> r299 | Last Updated: September 30, 2026
 > Total onsite links: 51518 (51175 sorted + 343 unsorted)\
 > https://yourworstnightmare1.github.io/proxy-list/
 <br>
@@ -27,9 +27,8 @@ Try out my newest project, the [Proxy Development Toolkit](https://github.com/yo
 
 ## Update Notice
 
-### Fixed
-- Fixed critical bugs that occurred that broke access to the list on Scramjet and Ultraviolet. Users on those proxies should be able to view the site properly again.
-- Added system to detect bad saved site data and replaces it with new data to fix an issue that causes the list to not load anything. If you're still having problems, [click here](./fix-loading/index.html).
+### New
+- You can now recieve comments on your feedback, appeals, and link requests
 
 # 💜 Selenite
 > [!NOTE]

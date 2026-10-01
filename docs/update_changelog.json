@@ -2,6 +2,12 @@
   "_note": "Archived site update notices. Regenerate history with: python3 scripts/build_update_changelog.py",
   "entries": [
     {
+      "version": "v7.3.8",
+      "revision": "r299",
+      "released": "September 30, 2026",
+      "update_notice": "### New\n- You can now recieve comments on your feedback, appeals, and link requests"
+    },
+    {
       "version": "v7.3.6",
       "revision": "r298",
       "released": "September 30, 2026",

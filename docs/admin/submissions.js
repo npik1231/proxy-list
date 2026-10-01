@@ -258,8 +258,19 @@
     }
   }
 
+  function askApprovalComment() {
+    var comment = window.prompt(
+      "Optional comment for the user (leave blank for none, Cancel to stop):",
+      ""
+    );
+    if (comment === null) return null;
+    return String(comment).trim().slice(0, 2000);
+  }
+
   async function onApprove(docId, sub) {
-    await updateSubmission(docId, "approved", "", {
+    var comment = askApprovalComment();
+    if (comment === null) return;
+    await updateSubmission(docId, "approved", comment, {
       publishedToList: false,
       publishQueued: true,
     });
@@ -267,11 +278,13 @@
     if (copyBox) copyBox.value = row;
     if (copySection) copySection.hidden = false;
     await requestPublishSync();
-    await notifyUser(sub.submitterUid, {
+    var approvedNotice = {
       kind: "links_approved",
       count: 1,
       dateMs: Date.now(),
-    });
+    };
+    if (comment) approvedNotice.reason = comment;
+    await notifyUser(sub.submitterUid, approvedNotice);
     await loadPending();
     await loadRecent();
   }

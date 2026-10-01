@@ -208,7 +208,9 @@
     var type = row.type || "feature";
     if (status === "done") {
       var kind = type === "bug" ? "bug_approved" : "feature_approved";
-      await notifyUser(row.submitterUid, { kind: kind, dateMs: Date.now() });
+      var approvedNotice = { kind: kind, dateMs: Date.now() };
+      if (reason) approvedNotice.reason = reason;
+      await notifyUser(row.submitterUid, approvedNotice);
     } else if (status === "wontfix") {
       var denyKind = type === "bug" ? "bug_denied" : "feature_denied";
       await notifyUser(row.submitterUid, {
@@ -452,7 +454,14 @@
       var status = act === "done" ? "done" : act === "wontfix" ? "wontfix" : "";
       if (!status) return;
       var reason = "";
-      if (status !== "done") {
+      if (status === "done") {
+        var comment = window.prompt(
+          "Optional comment for the user (leave blank for none, Cancel to stop):",
+          ""
+        );
+        if (comment === null) return;
+        reason = String(comment).trim().slice(0, 2000);
+      } else {
         reason = window.prompt("Reason for denial (shown to the user):", "") || "";
       }
       btn.disabled = true;
